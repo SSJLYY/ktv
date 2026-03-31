@@ -102,10 +102,11 @@ function QueueList({ orderId, queueVersion }) {
 
   const handleRemove = async (item) => {
     if (operatingId) return
-    const confirm = await Dialog.confirm({
+    // F-N2修复：避免变量名 confirm 覆盖全局 Dialog.confirm，改为 confirmed
+    const confirmed = await Dialog.confirm({
       content: `确定取消「${item.songName}」？`,
     })
-    if (!confirm) return
+    if (!confirmed) return
 
     setOperatingId(item.id)
     try {
