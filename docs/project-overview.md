@@ -1,9 +1,9 @@
 # KTV点歌系统 - 项目设计文档
 
-> 版本：v1.3
-> 创建日期：2026-03-30  更新：2026-03-30（前端改为React；JDK升级21，Spring Boot升级3.x；纳入本地文件流媒体播放）
+> 版本：v1.4
+> 创建日期：2026-03-30  更新：2026-03-31（更新项目结构、完成里程碑M1-M9）
 > 作者：shaun.sheng
-> 技术栈：Java 21 + Spring Boot 3.x + MySQL 8 + MyBatis-Plus + Redis + React 18 + Ant Design
+> 技术栈：Java 21 + Spring Boot 3.2.x + MySQL 8 + MyBatis-Plus 3.5.7 + Redis 6 + React 18 + Ant Design 5
 
 ---
 
@@ -107,56 +107,101 @@
 ktv/
 ├── ktv-backend/                    # Spring Boot 后端（REST API）
 │   ├── src/main/java/com/ktv/
-│   │   ├── config/                 # 配置类（Redis、MyBatis、CORS等）
-│   │   ├── controller/
+│   │   ├── config/                 # 配置类
+│   │   │   ├── CorsConfig.java
+│   │   │   ├── RedisConfig.java
+│   │   │   ├── MyBatisPlusConfig.java
+│   │   │   └── WebMvcConfig.java
+│   │   ├── controller/             # 控制器
 │   │   │   ├── admin/              # 后台管理接口 /api/admin/**
-│   │   │   └── room/               # 包厢端接口 /api/room/**
-│   │   ├── service/
-│   │   │   └── impl/
-│   │   ├── mapper/
-│   │   ├── entity/
-│   │   ├── dto/                    # 请求入参
-│   │   ├── vo/                     # 响应出参
-│   │   └── common/
-│   │       ├── result/             # Result<T> 统一返回
-│   │       ├── exception/          # 全局异常处理
-│   │       └── util/               # 工具类
-│   └── pom.xml
+│   │   │   ├── room/               # 包厢端接口 /api/room/**
+│   │   │   ├── HealthController.java
+│   │   │   ├── MediaStreamController.java
+│   │   │   └── TestController.java
+│   │   ├── service/                # 业务逻辑服务
+│   │   │   ├── SongService.java
+│   │   │   ├── SingerService.java
+│   │   │   ├── CategoryService.java
+│   │   │   ├── RoomService.java
+│   │   │   ├── OrderService.java
+│   │   │   ├── SongSearchService.java
+│   │   │   ├── PlayQueueService.java
+│   │   │   ├── PlayControlService.java
+│   │   │   ├── HotSongService.java
+│   │   │   ├── MediaService.java
+│   │   │   ├── SysUserService.java
+│   │   │   └── impl/               # 服务实现
+│   │   ├── mapper/                 # MyBatis Mapper接口
+│   │   ├── entity/                 # 实体类
+│   │   ├── dto/                    # 请求入参DTO
+│   │   ├── vo/                     # 响应出参VO
+│   │   ├── common/                 # 公共组件
+│   │   │   ├── result/             # Result<T> 统一返回
+│   │   │   ├── exception/          # 全局异常处理
+│   │   │   └── enums/              # 枚举类
+│   │   ├── interceptor/            # 拦截器（JWT认证）
+│   │   ├── task/                   # 定时任务
+│   │   └── util/                   # 工具类
+│   └── src/main/resources/
+│       └── application.yml         # 应用配置
 │
 ├── admin-frontend/                 # 后台管理 React 项目
 │   ├── src/
-│   │   ├── api/                    # Axios 接口封装
+│   │   ├── api/                    # Axios API 封装
 │   │   ├── pages/                  # 页面组件
-│   │   │   ├── Login/
+│   │   │   ├── Login/              # 登录页面
 │   │   │   ├── Song/               # 歌曲管理
 │   │   │   ├── Singer/             # 歌手管理
+│   │   │   ├── Category/           # 分类管理
 │   │   │   ├── Room/               # 包厢管理
 │   │   │   └── Order/              # 订单管理
-│   │   ├── components/             # 公共组件
+│   │   ├── components/             # 共享组件
+│   │   ├── layouts/                # 布局组件
 │   │   ├── store/                  # 状态管理（Zustand）
 │   │   ├── router/                 # React Router v6
-│   │   └── utils/
+│   │   ├── utils/                  # 工具函数
+│   │   ├── assets/                 # 静态资源
+│   │   ├── App.jsx
+│   │   └── main.jsx
 │   ├── vite.config.js
 │   └── package.json
 │
 ├── room-frontend/                  # 包厢点歌 React 项目
 │   ├── src/
-│   │   ├── api/
-│   │   ├── pages/
+│   │   ├── api/                    # Axios API 封装
+│   │   ├── pages/                  # 页面组件
+│   │   │   ├── Join/               # 加入房间
 │   │   │   ├── Search/             # 歌曲检索
-│   │   │   ├── Queue/              # 已点/已唱列表
-│   │   │   └── PlayControl/        # 播放控制
-│   │   ├── components/
-│   │   ├── store/
-│   │   └── utils/
+│   │   │   └── Queue/              # 点歌队列与播放
+│   │   ├── components/             # 共享组件
+│   │   │   ├── PlayBar/            # 底部播放控制栏
+│   │   │   ├── SongCard/           # 歌曲卡片
+│   │   │   └── TabBar/             # 底部导航栏
+│   │   ├── layouts/                # 布局组件
+│   │   ├── store/                  # 状态管理（Zustand）
+│   │   ├── router/                 # React Router v6
+│   │   ├── assets/                 # 静态资源
+│   │   └── main.jsx
 │   ├── vite.config.js
 │   └── package.json
 │
 ├── sql/                            # 数据库脚本
-│   ├── init-schema.sql
-│   └── init-data.sql
-└── docs/                           # 项目文档
-    └── project-overview.md
+│   ├── init-schema.sql             # 表结构
+│   └── init-data.sql               # 初始数据
+│
+├── docs/                           # 项目文档
+│   ├── README.md                   # 文档索引
+│   ├── project-overview.md         # 项目设计文档
+│   ├── api-reference.md            # API参考文档
+│   ├── code-review-standards.md    # 代码审查规范
+│   └── tasks/                      # 任务文档
+│
+├── skills/                         # 开发辅助技能
+│
+├── README.md                       # 项目说明（中文）
+├── README.en.md                    # 项目说明（英文）
+├── CONTRIBUTING.md                 # 贡献指南
+└── LICENSE                         # MIT许可证
 ```
 
 ---
@@ -417,9 +462,10 @@ CREATE TABLE `t_sys_user` (
 |---------|------|------|----------|
 | `ktv:queue:{orderId}` | List | 包厢点歌排队队列，存储orderSong的ID列表 | 随订单结束清除 |
 | `ktv:playing:{orderId}` | String | 当前正在播放的歌曲orderSongId | 随订单结束清除 |
+| `ktv:play:status:{orderId}` | String | 播放状态（PLAYING/PAUSED/NONE） | 随订单结束清除 |
+| `ktv:current_order:room:{roomId}` | String | 包厢当前订单ID | 实时更新 |
 | `ktv:song:hot` | ZSet | 热门歌曲排行榜，score=点播次数 | 24小时 |
 | `ktv:song:cache:{songId}` | Hash | 歌曲详情缓存 | 1小时 |
-| `ktv:room:status` | Hash | 所有包厢状态快照 | 不过期，实时更新 |
 
 ---
 
@@ -496,17 +542,18 @@ CREATE TABLE `t_sys_user` (
 
 ## 七、开发里程碑
 
-| 阶段 | 内容 | 预估时间 | 交付物 |
-|------|------|----------|--------|
-| M1 - 基础搭建 | 后端骨架、数据库、基础配置 | 2天 | 可运行的空项目 + 建表SQL |
-| M2 - 后台管理后端 | 歌曲/歌手/分类/包厢CRUD API + JWT登录 | 4天 | 后台管理REST接口完整 |
-| M3 - 后台管理前端 | admin-frontend React页面（登录+各管理页） | 3天 | 后台管理可视化操作 |
-| M4 - 订单管理 | 开台/结账API + 前端页面 | 2天 | 订单流程闭环 |
-| M5 - 点歌核心后端 | 歌曲检索 + 点歌排队 + 播放控制 API | 4天 | 包厢点歌REST接口完整 |
-| M6 - 点歌前端 | room-frontend React点歌页面 | 3天 | 包厢端完整点歌体验 |
-| M7 - Redis集成 | 热门排行、队列缓存、状态缓存 | 2天 | 性能优化完成 |
-| M8 - 联调测试 | 前后端整体联调、Bug修复、测试数据 | 2天 | 可演示的完整系统 |
-| **合计** | | **约22天** | |
+| 阶段 | 内容 | 状态 | 交付物 |
+|------|------|------|--------|
+| M1 - 基础搭建 | 后端骨架、数据库、基础配置 | ✅ 已完成 | 可运行的空项目 + 建表SQL |
+| M2 - 后台管理后端 | 歌曲/歌手/分类/包厢CRUD API + JWT登录 | ✅ 已完成 | 后台管理REST接口完整 |
+| M3 - 后台管理前端 | admin-frontend React页面 | ✅ 已完成 | 后台管理可视化操作 |
+| M4 - 点歌核心后端 | 歌曲检索 + 点歌排队 + 播放控制 API | ✅ 已完成 | 包厢点歌REST接口完整 |
+| M5 - 订单管理 | 开台/结账API + 前端页面 | ✅ 已完成 | 订单流程闭环 |
+| M6 - Redis集成 | 热门排行、队列缓存、状态缓存 | ✅ 已完成 | 性能优化完成 |
+| M7 - 媒体播放 | 流式传输、播放器集成 | ✅ 已完成 | 实际媒体播放功能 |
+| M8 - room-frontend | 包厢点歌React页面 | ✅ 已完成 | 包厢端完整点歌体验 |
+| M9 - 代码审查 | 深度代码审查与优化 | ✅ 已完成 | 代码质量提升 |
+| M10 - 联调测试 | 初始化测试数据 + 接口整体联调 | 🚧 待进行 | 可演示的完整系统 |
 
 ---
 
