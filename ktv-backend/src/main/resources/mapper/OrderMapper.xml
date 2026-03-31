@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ktv.mapper.OrderMapper">
+
+    <!-- 订单基础列 -->
+    <sql id="Base_Column_List">
+        o.id,
+        o.order_no,
+        o.room_id,
+        o.start_time,
+        o.end_time,
+        o.duration_minutes,
+        o.room_amount,
+        o.total_amount,
+        o.status,
+        o.remark,
+        o.operator_id,
+        o.closer_id,
+        o.create_time,
+        o.update_time,
+        o.deleted
+    </sql>
+
+    <!-- 分页查询订单列表 -->
+    <!-- BugC2修复：su1.username AS operator_name 导致列表查出的是登录名，
+         而 convertToVO 补查时用 operator.getRealName() 返回真实姓名，两者不一致。
+         统一改为 su1.real_name AS operator_name，与补查逻辑保持一致。 -->
+    <!-- S2修复：增加 LEFT JOIN su2 查询 closer_name，消除分页场景下 closerName 的 N+1 查询 -->
+    <select id="selectOrderPage" resultType="com.ktv.entity.Order">
+        SELECT
+            <include refid="Base_Column_List"/>,
+            r.name AS room_name,
+            r.type AS room_type,
+            su1.real_name AS operator_name,
+            su2.real_name AS closer_name
+        FROM t_order o
+        LEFT JOIN t_room r ON o.room_id = r.id AND r.deleted = 0
+        LEFT JOIN t_sys_user su1 ON o.operator_id = su1.id
+        LEFT JOIN t_sys_user su2 ON o.closer_id = su2.id
+        WHERE o.deleted = 0
+        <if test="startDate != null">
+            AND o.start_time &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND o.start_time &lt;= #{endDate}
+        </if>
+        <if test="roomId != null">
+            AND o.room_id = #{roomId}
+        </if>
+        <if test="status != null">
+            AND o.status = #{status}
+        </if>
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!-- 查询某日期当天的订单最大序号 -->
+    <!-- BugF修复：KTV(3位) + yyyyMMdd(8位) + 序号(6位)，序号从第12位开始，原来的13是错的 -->
+    <select id="selectMaxSeqByDate" resultType="java.lang.Integer">
+        SELECT MAX(CAST(SUBSTRING(order_no, 12, 6) AS SIGNED))
+        FROM t_order
+        WHERE order_no LIKE CONCAT('KTV', #{dateStr}, '%')
+          AND deleted = 0
+    </select>
+
+    <!-- 查询包厢当前进行中的订单 -->
+    <select id="selectActiveOrderByRoomId" resultType="com.ktv.entity.Order">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_order o
+        WHERE o.room_id = #{roomId} AND o.status = 1 AND o.deleted = 0
+        LIMIT 1
+    </select>
+
+</mapper>

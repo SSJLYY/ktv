@@ -1,0 +1,23 @@
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--adm-color-background);
+}
+
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 52px; /* PlayBar 高度 */
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-bar-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  border-top: 1px solid var(--adm-border-color);
+  background: var(--adm-color-background);
+}

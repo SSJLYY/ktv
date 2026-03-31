@@ -1,0 +1,39 @@
+.join-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.join-header {
+  text-align: center;
+  margin-bottom: 48px;
+  color: #fff;
+}
+
+.join-header h1 {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.join-header p {
+  font-size: 18px;
+  opacity: 0.85;
+}
+
+.join-form {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.join-form .adm-input {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  --border-color: transparent;
+}

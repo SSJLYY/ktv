@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ktv.mapper.SongMapper">
+
+    <resultMap id="SongVOMap" type="com.ktv.vo.SongVO">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="singer_id" property="singerId"/>
+        <result column="singer_name" property="singerName"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="pinyin" property="pinyin"/>
+        <result column="pinyin_initial" property="pinyinInitial"/>
+        <result column="language" property="language"/>
+        <result column="duration" property="duration"/>
+        <result column="file_path" property="filePath"/>
+        <result column="cover_url" property="coverUrl"/>
+        <result column="lyric_path" property="lyricPath"/>
+        <result column="play_count" property="playCount"/>
+        <result column="is_hot" property="isHot"/>
+        <result column="is_new" property="isNew"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 根据ID查询单首歌曲（含歌手名、分类名，不过滤status） -->
+    <select id="selectVOById" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0 AND s.id = #{id}
+    </select>
+
+    <!-- S1修复：根据ID列表批量查询歌曲（含歌手名、分类名） -->
+    <select id="selectVOByIds" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0 AND s.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <!--
+        原来 WHERE s.deleted = 0 AND s.status = 1 导致管理员在后台看不到下架歌曲，
+        无法对其进行重新上架、编辑、删除等管理操作。
+        修复：移除 AND s.status = 1，管理端展示全部状态（上架+下架）。
+        包厢端搜索（searchByKeyword/selectBySingerId/selectByCategoryId）保持 status=1 过滤。
+    -->
+    <select id="selectPageWithConditions" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0
+        <if test="name != null and name != ''">
+            AND s.name LIKE CONCAT('%', #{name}, '%')
+        </if>
+        <if test="singerId != null">
+            AND s.singer_id = #{singerId}
+        </if>
+        <if test="categoryId != null">
+            AND s.category_id = #{categoryId}
+        </if>
+        <if test="language != null and language != ''">
+            AND s.language = #{language}
+        </if>
+        <if test="status != null">
+            AND s.status = #{status}
+        </if>
+        ORDER BY s.id DESC
+    </select>
+
+    <!-- 按歌曲名或拼音首字母模糊搜索 -->
+    <select id="searchByKeyword" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0 AND s.status = 1
+          AND (
+            s.name LIKE CONCAT('%', #{keyword}, '%')
+            OR s.pinyin_initial LIKE CONCAT('%', UPPER(#{keyword}), '%')
+            OR s.pinyin LIKE CONCAT('%', UPPER(#{keyword}), '%')
+          )
+        ORDER BY
+          CASE WHEN s.name LIKE CONCAT('%', #{keyword}, '%') THEN 0 ELSE 1 END,
+          s.play_count DESC,
+          s.id DESC
+    </select>
+
+    <!-- 按歌手查询歌曲（分页） -->
+    <select id="selectBySingerId" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0 AND s.status = 1 AND s.singer_id = #{singerId}
+        ORDER BY s.name ASC
+    </select>
+
+    <!-- 按分类查询歌曲（分页） -->
+    <select id="selectByCategoryId" resultMap="SongVOMap">
+        SELECT
+            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+            s.play_count, s.is_hot, s.is_new, s.status,
+            s.create_time, s.update_time,
+            sg.name as singer_name,
+            c.name as category_name
+        FROM t_song s
+        LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
+        LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
+        WHERE s.deleted = 0 AND s.status = 1 AND s.category_id = #{categoryId}
+        ORDER BY s.name ASC
+    </select>
+
+</mapper>

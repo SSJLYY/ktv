@@ -1,0 +1,169 @@
+.search-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.search-page .adm-tabs {
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.search-page .adm-tabs-header {
+  border-bottom: 1px solid #eee;
+}
+
+.search-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* 搜索栏 */
+.search-tab {
+  padding-bottom: 0;
+}
+
+.search-tab .adm-search {
+  padding: 0;
+}
+
+/* 加载与空状态 */
+.loading-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #999;
+  gap: 8px;
+}
+
+.empty-text {
+  text-align: center;
+  color: #999;
+  padding: 60px 0;
+  font-size: 16px;
+}
+
+/* 分类标签 */
+.category-tags {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px 0 12px;
+}
+
+/* 歌手Tab */
+.view-header {
+  padding: 12px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1677ff;
+  cursor: pointer;
+}
+
+/* 歌曲列表 */
+.song-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.song-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px;
+  background: #fff;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+
+.song-item:active {
+  background: #f0f0f0;
+}
+
+.song-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.song-rank {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.song-rank.top-rank {
+  color: #ff6b35;
+  font-size: 18px;
+}
+
+.song-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-name {
+  font-size: 17px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-meta {
+  font-size: 13px;
+  color: #999;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.song-lang {
+  background: #f0f0f0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #666;
+}
+
+/* 点歌按钮 */
+.btn-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 2px solid #1677ff;
+  border-radius: 50%;
+  background: transparent;
+  color: #1677ff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.btn-add:active {
+  background: #1677ff;
+  color: #fff;
+}
+
+.btn-add.adding {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.btn-add:disabled {
+  opacity: 0.4;
+}
