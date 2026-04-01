@@ -4,9 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.github.houbb.pinyin.constant.enums.PinyinStyleEnum;
-import com.github.houbb.pinyin.util.PinyinHelper;
 import com.ktv.common.exception.BusinessException;
+import com.ktv.common.util.PinyinUtil;
 import com.ktv.dto.SingerDTO;
 import com.ktv.entity.Singer;
 import com.ktv.mapper.SingerMapper;
@@ -49,11 +48,9 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
         Singer singer = new Singer();
         BeanUtils.copyProperties(singerDTO, singer);
 
-        // 自动生成拼音
-        String pinyin = PinyinHelper.toPinyin(singer.getName(), PinyinStyleEnum.NORMAL);
-        String pinyinInitial = PinyinHelper.toPinyin(singer.getName(), PinyinStyleEnum.FIRST_LETTER);
-        singer.setPinyin(pinyin);
-        singer.setPinyinInitial(pinyinInitial.toUpperCase());
+        // 自动生成拼音（使用 PinyinUtil 统一封装）
+        singer.setPinyin(PinyinUtil.getPinyin(singer.getName()));
+        singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singer.getName()));
 
         // 设置默认值
         if (singer.getGender() == null) {
@@ -99,10 +96,8 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
 
         // 如果修改了歌手名，更新拼音
         if (!existSinger.getName().equals(singerDTO.getName())) {
-            String pinyin = PinyinHelper.toPinyin(singer.getName(), PinyinStyleEnum.NORMAL);
-            String pinyinInitial = PinyinHelper.toPinyin(singer.getName(), PinyinStyleEnum.FIRST_LETTER);
-            singer.setPinyin(pinyin);
-            singer.setPinyinInitial(pinyinInitial.toUpperCase());
+            singer.setPinyin(PinyinUtil.getPinyin(singer.getName()));
+            singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singer.getName()));
         } else {
             singer.setPinyin(existSinger.getPinyin());
             singer.setPinyinInitial(existSinger.getPinyinInitial());

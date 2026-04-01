@@ -6,9 +6,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.houbb.pinyin.constant.enums.PinyinStyleEnum;
-import com.github.houbb.pinyin.util.PinyinHelper;
 import com.ktv.common.exception.BusinessException;
+import com.ktv.common.util.PinyinUtil;
 import com.ktv.dto.SongDTO;
 import com.ktv.entity.Singer;
 import com.ktv.entity.Song;
@@ -67,11 +66,9 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
 
-        // 自动生成拼音
-        String pinyin = PinyinHelper.toPinyin(song.getName(), PinyinStyleEnum.NORMAL);
-        String pinyinInitial = PinyinHelper.toPinyin(song.getName(), PinyinStyleEnum.FIRST_LETTER);
-        song.setPinyin(pinyin);
-        song.setPinyinInitial(pinyinInitial.toUpperCase());
+        // 自动生成拼音（使用 PinyinUtil 统一封装）
+        song.setPinyin(PinyinUtil.getPinyin(song.getName()));
+        song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
 
         // 设置默认值
         if (song.getLanguage() == null || song.getLanguage().isEmpty()) {
@@ -146,10 +143,8 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setPinyin(existSong.getPinyin());
             song.setPinyinInitial(existSong.getPinyinInitial());
         } else if (!existSong.getName().equals(song.getName())) {
-            String pinyin = PinyinHelper.toPinyin(song.getName(), PinyinStyleEnum.NORMAL);
-            String pinyinInitial = PinyinHelper.toPinyin(song.getName(), PinyinStyleEnum.FIRST_LETTER);
-            song.setPinyin(pinyin);
-            song.setPinyinInitial(pinyinInitial.toUpperCase());
+            song.setPinyin(PinyinUtil.getPinyin(song.getName()));
+            song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
         } else {
             song.setPinyin(existSong.getPinyin());
             song.setPinyinInitial(existSong.getPinyinInitial());
