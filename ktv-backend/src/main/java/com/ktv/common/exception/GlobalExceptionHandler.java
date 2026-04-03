@@ -1,4 +1,4 @@
-﻿package com.ktv.common.exception;
+package com.ktv.common.exception;
 
 import com.ktv.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
@@ -23,10 +23,11 @@ public class GlobalExceptionHandler {
 
     /**
      * 业务异常处理
+     * M10修复：业务异常是预期内的正常流程，使用log.warn而非log.error，避免告警疲劳
      */
     @ExceptionHandler(BusinessException.class)
     public Result<?> handleBusinessException(BusinessException e, HttpServletRequest request) {
-        log.error("业务异常：URI={}, 错误码={}, 错误信息={}", request.getRequestURI(), e.getCode(), e.getMessage());
+        log.warn("业务异常：URI={}, 错误码={}, 错误信息={}", request.getRequestURI(), e.getCode(), e.getMessage());
         return Result.fail(e.getCode(), e.getMessage());
     }
 

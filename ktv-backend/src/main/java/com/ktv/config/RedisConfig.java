@@ -1,10 +1,8 @@
-﻿package com.ktv.config;
+package com.ktv.config;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -13,7 +11,8 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.integration.redis.util.RedisLockRegistry;
@@ -23,6 +22,8 @@ import java.time.Duration;
 
 /**
  * Redis配置类
+ * C1/C7修复：使用安全的 ObjectMapper 配置，完全禁用 defaultTyping
+ * 使用 StringRedisTemplate + 手动JSON序列化方案
  *
  * @author shaun.sheng
  * @since 2026-03-30
@@ -32,8 +33,19 @@ import java.time.Duration;
 public class RedisConfig {
 
     /**
+     * 创建安全的 ObjectMapper
+     * C7修复：完全禁用 defaultTyping，不写入 @class 类型信息，防止反序列化RCE漏洞
+     */
+    private ObjectMapper createSafeObjectMapper() {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        // C7修复：不调用 activateDefaultTyping，避免写入 @class 类型信息
+        return objectMapper;
+    }
+
+    /**
      * 配置RedisTemplate
-     * 使用Jackson序列化器，将对象序列化为JSON存储到Redis
+     * C1/C7修复：使用安全的序列化器配置
      *
      * @param connectionFactory Redis连接工厂
      * @return RedisTemplate
@@ -43,21 +55,9 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // 使用Jackson2JsonRedisSerializer来序列化和反序列化redis的value值
-        Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<>(Object.class);
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        // 指定要序列化的域，field、get和set，以及修饰符范围，ANY是都有包括private和public
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-
-        // 指定序列化输入的类型，类必须是非final修饰的，final修饰的类如String、Integer等会报异常
-        objectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-
-        jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
+        // C7修复：使用安全的 ObjectMapper，不写入类型信息
+        GenericJackson2JsonRedisSerializer jackson2JsonRedisSerializer = 
+                new GenericJackson2JsonRedisSerializer(createSafeObjectMapper());
 
         // 使用StringRedisSerializer来序列化和反序列化redis的key值
         StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
@@ -79,22 +79,16 @@ public class RedisConfig {
     /**
      * 配置缓存管理器
      * 用于Spring Cache注解支持
+     * C1/C7修复：使用安全的 ObjectMapper 配置
      *
      * @param connectionFactory Redis连接工厂
      * @return CacheManager
      */
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // 配置序列化
-        Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<>(Object.class);
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        objectMapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
-                ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
-        );
-        jackson2JsonRedisSerializer.setObjectMapper(objectMapper);
+        // C7修复：使用安全的 ObjectMapper
+        GenericJackson2JsonRedisSerializer jackson2JsonRedisSerializer = 
+                new GenericJackson2JsonRedisSerializer(createSafeObjectMapper());
 
         // 配置缓存
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
@@ -117,7 +111,7 @@ public class RedisConfig {
      */
     @Bean
     public RedisLockRegistry redisLockRegistry(RedisConnectionFactory connectionFactory) {
-        return new RedisLockRegistry(connectionFactory, "ktv:lock:", Duration.ofSeconds(30).toMillis());
+        return new RedisLockRegistry(connectionFactory, "ktv:lock:", Duration.ofSeconds(30));
     }
 
     /**

@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -12,7 +12,6 @@ import com.ktv.service.PlayQueueService;
 import com.ktv.vo.SongVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 点歌队列Service实现类
+ * M15/M16修复：统一使用构造器注入，移除@RequiredArgsConstructor和@Autowired混合使用
  *
  * @author shaun.sheng
  * @since 2026-03-30
@@ -34,22 +34,12 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     private final OrderSongMapper orderSongMapper;
     private final SongMapper songMapper;
     private final StringRedisTemplate stringRedisTemplate;
-    private HotSongService hotSongService;
+    private final HotSongService hotSongService;
     /**
      * Bug12修复：注入 PlayControlService（用setter注入避免循环依赖）
      * 点歌后如果当前没有播放中的歌曲，自动触发 next() 开始播放
      */
-    private PlayControlService playControlService;
-
-    @Autowired
-    public void setHotSongService(HotSongService hotSongService) {
-        this.hotSongService = hotSongService;
-    }
-
-    @Autowired
-    public void setPlayControlService(PlayControlService playControlService) {
-        this.playControlService = playControlService;
-    }
+    private final PlayControlService playControlService;
 
     /**
      * Redis队列Key前缀
@@ -107,22 +97,29 @@ public class PlayQueueServiceImpl implements PlayQueueService {
             hotSongService.incrementHotScore(songId);
         }
 
-        // 7. Bug12修复：如果当前没有播放中的歌曲，自动触发 next() 开始播放
-        // 场景：包厢刚开台后点第一首歌，ktv:playing:{orderId} 为空，需要自动开始
-        try {
-            String playingKey = PLAYING_KEY_PREFIX + orderId;
-            String currentPlaying = stringRedisTemplate.opsForValue().get(playingKey);
-            if (currentPlaying == null && playControlService != null) {
-                log.info("当前无播放歌曲，自动触发播放第一首：orderId={}", orderId);
-                playControlService.next(orderId);
+        // 7. H17修复：将playControlService.next()调用移到事务外
+        // 使用TransactionSynchronization在事务提交后异步触发，避免事务传播问题
+        final Long orderSongId = orderSong.getId();
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+            new org.springframework.transaction.support.TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        String playingKey = PLAYING_KEY_PREFIX + orderId;
+                        String currentPlaying = stringRedisTemplate.opsForValue().get(playingKey);
+                        if (currentPlaying == null && playControlService != null) {
+                            log.info("当前无播放歌曲，自动触发播放第一首：orderId={}", orderId);
+                            playControlService.next(orderId);
+                        }
+                    } catch (Exception e) {
+                        log.warn("自动触发播放失败（不影响点歌），orderId={}: {}", orderId, e.getMessage());
+                    }
+                }
             }
-        } catch (Exception e) {
-            // 自动播放失败不影响点歌结果，用户可以手动切歌
-            log.warn("自动触发播放失败（不影响点歌），orderId={}: {}", orderId, e.getMessage());
-        }
+        );
 
-        log.info("点歌成功：点歌记录ID={}, 排序序号={}", orderSong.getId(), sortOrder);
-        return orderSong.getId();
+        log.info("点歌成功：点歌记录ID={}, 排序序号={}", orderSongId, sortOrder);
+        return orderSongId;
     }
 
     /**

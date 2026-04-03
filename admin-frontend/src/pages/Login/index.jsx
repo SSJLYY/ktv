@@ -77,11 +77,6 @@ const Login = () => {
             </Button>
           </Form.Item>
         </Form>
-
-        <div className="login-tips">
-          <p>默认账号: admin</p>
-          <p>默认密码: admin123</p>
-        </div>
       </Card>
     </div>
   )

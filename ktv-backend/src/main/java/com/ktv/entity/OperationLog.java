@@ -3,6 +3,7 @@ package com.ktv.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
  * 操作日志实体类
  * 对应表：t_operation_log
  * 用于记录系统操作日志，便于审计和问题追踪
+ * H13修复：添加deleted字段和@TableLogic注解，与表结构保持一致
  */
 @Data
 @TableName("t_operation_log")
@@ -108,6 +110,14 @@ public class OperationLog implements Serializable {
     @TableField("create_time")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
+
+    /**
+     * H13修复：逻辑删除标识（0未删除 1已删除）
+     * 与表结构保持一致，使MyBatis-Plus全局逻辑删除配置生效
+     */
+    @TableLogic
+    @TableField("deleted")
+    private Integer deleted;
 
     // ========== 便捷方法 ==========
 

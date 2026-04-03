@@ -113,22 +113,30 @@ public final class MediaUtils {
 
     /**
      * 判断是否为音视频文件
+     * L3修复：显式处理null情况，避免Set.contains(null)意图不清晰
      *
      * @param extension 文件扩展名
      * @return true 是音视频文件
      */
     public static boolean isMediaFile(String extension) {
-        return ALLOWED_MEDIA_EXTENSIONS.contains(extension != null ? extension.toLowerCase() : null);
+        if (extension == null) {
+            return false;
+        }
+        return ALLOWED_MEDIA_EXTENSIONS.contains(extension.toLowerCase());
     }
 
     /**
      * 判断是否为图片文件
+     * L3修复：显式处理null情况
      *
      * @param extension 文件扩展名
      * @return true 是图片文件
      */
     public static boolean isImageFile(String extension) {
-        return ALLOWED_IMAGE_EXTENSIONS.contains(extension != null ? extension.toLowerCase() : null);
+        if (extension == null) {
+            return false;
+        }
+        return ALLOWED_IMAGE_EXTENSIONS.contains(extension.toLowerCase());
     }
 
     /**
@@ -141,5 +149,19 @@ public final class MediaUtils {
         if (filePath == null) return false;
         String ext = getFileExtension(filePath);
         return Set.of("mp4", "avi", "mkv", "webm").contains(ext);
+    }
+
+    /**
+     * 根据图片扩展名获取MIME类型
+     * M22修复：提供专门的图片MIME类型获取方法
+     *
+     * @param extension 图片扩展名（小写）
+     * @return MIME类型字符串，未知扩展名返回 image/jpeg
+     */
+    public static String getImageMediaType(String extension) {
+        if (extension == null) {
+            return "image/jpeg";
+        }
+        return EXTENSION_TO_MEDIA_TYPE.getOrDefault(extension.toLowerCase(), "image/jpeg");
     }
 }

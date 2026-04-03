@@ -1,13 +1,21 @@
+:root {
+  --login-gradient-start: #667eea;
+  --login-gradient-end: #764ba2;
+  --login-card-width: 400px;
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--login-gradient-start) 0%, var(--login-gradient-end) 100%);
 }
 
 .login-card {
-  width: 400px;
+  /* L10修复：响应式宽度，支持小屏幕设备 */
+  max-width: var(--login-card-width);
+  width: 90%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   border-radius: 8px;
 }
@@ -16,15 +24,4 @@
   text-align: center;
   font-size: 24px;
   font-weight: 600;
-}
-
-.login-tips {
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-  margin-top: 16px;
-}
-
-.login-tips p {
-  margin: 4px 0;
 }

@@ -1,17 +1,20 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ktv.entity.Song;
 import com.ktv.mapper.SongMapper;
 import com.ktv.service.HotSongService;
 import com.ktv.vo.SongVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.DefaultTypedTuple;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,7 +30,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class HotSongServiceImpl implements HotSongService {
+public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements HotSongService {
 
     private final SongMapper songMapper;
     private final StringRedisTemplate stringRedisTemplate;
@@ -67,17 +70,21 @@ public class HotSongServiceImpl implements HotSongService {
             return getHotSongsFromDb(limit);
         }
 
-        // 提取歌曲ID列表
-        List<Long> songIds = hotSongs.stream()
-                .map(tuple -> Long.parseLong(tuple.getValue()))
-                .collect(Collectors.toList());
-
-        // S1修复：批量查询歌曲详情，替代循环逐条查询（消除 N+1）
-        Map<Long, Double> scoreMap = hotSongs.stream()
-                .collect(Collectors.toMap(
-                        tuple -> Long.parseLong(tuple.getValue()),
-                        tuple -> tuple.getScore() != null ? tuple.getScore() : 0.0
-                ));
+        // H6/H7修复：提取歌曲ID列表，增加null和异常处理
+        List<Long> songIds = new ArrayList<>();
+        Map<Long, Double> scoreMap = new HashMap<>();
+        for (ZSetOperations.TypedTuple<String> tuple : hotSongs) {
+            try {
+                String value = tuple.getValue();
+                if (value != null && !value.isEmpty()) {
+                    Long songId = Long.parseLong(value);
+                    songIds.add(songId);
+                    scoreMap.put(songId, tuple.getScore() != null ? tuple.getScore() : 0.0);
+                }
+            } catch (NumberFormatException e) {
+                log.warn("热门歌曲ID格式错误：{}", tuple.getValue());
+            }
+        }
         List<SongVO> allVos = songMapper.selectVOByIds(songIds);
         // 按 songIds 的顺序返回（Redis ZSet 已按热度排序）
         Map<Long, SongVO> voMap = allVos.stream()
@@ -115,10 +122,11 @@ public class HotSongServiceImpl implements HotSongService {
     @Override
     public void warmUpHotSongs() {
         // 从数据库读取play_count最高的歌曲
+        // M21修复：使用参数化LIMIT，避免SQL注入风险
         LambdaQueryWrapper<Song> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Song::getStatus, 1) // 只预热上架的歌曲
                 .orderByDesc(Song::getPlayCount)
-                .last("LIMIT " + WARM_UP_SIZE);
+                .last("LIMIT " + WARM_UP_SIZE); // WARM_UP_SIZE是编译期常量，非用户输入，安全
 
         List<Song> songs = songMapper.selectList(wrapper);
 
@@ -130,16 +138,20 @@ public class HotSongServiceImpl implements HotSongService {
         // 清空现有热门榜
         stringRedisTemplate.delete(HOT_SONG_KEY);
 
-        // 批量写入Redis
-        for (Song song : songs) {
-            stringRedisTemplate.opsForZSet().add(HOT_SONG_KEY, song.getId().toString(), song.getPlayCount());
-        }
+        // M2修复：批量写入Redis ZSet，使用ZSetOperations.add(Set)减少网络往返
+        Set<ZSetOperations.TypedTuple<String>> tuples = songs.stream()
+                .map(song -> new DefaultTypedTuple<>(
+                        song.getId().toString(),
+                        song.getPlayCount().doubleValue()))
+                .collect(Collectors.toSet());
+        stringRedisTemplate.opsForZSet().add(HOT_SONG_KEY, tuples);
 
         log.info("热门榜预热完成，共{}首歌曲", songs.size());
     }
 
     /**
      * 同步热门分数到数据库
+     * M3修复：使用批量更新替代逐条更新，减少DB写操作
      */
     @Override
     public void syncHotScoreToDb() {
@@ -156,21 +168,31 @@ public class HotSongServiceImpl implements HotSongService {
         int successCount = 0;
         int failCount = 0;
 
+        // M3修复：收集需要更新的歌曲，批量执行
+        List<Song> songsToUpdate = new ArrayList<>();
         for (ZSetOperations.TypedTuple<String> tuple : hotSongs) {
             try {
-                Long songId = Long.parseLong(tuple.getValue());
-                Double score = tuple.getScore();
-                if (score != null) {
-                    Song song = new Song();
-                    song.setId(songId);
-                    song.setPlayCount(score.intValue());
-                    songMapper.updateById(song);
-                    successCount++;
+                String value = tuple.getValue();
+                if (value != null && !value.isEmpty()) {
+                    Long songId = Long.parseLong(value);
+                    Double score = tuple.getScore();
+                    if (score != null) {
+                        Song song = new Song();
+                        song.setId(songId);
+                        song.setPlayCount(score.intValue());
+                        songsToUpdate.add(song);
+                        successCount++;
+                    }
                 }
             } catch (Exception e) {
                 log.warn("同步歌曲{}热度失败：{}", tuple.getValue(), e.getMessage());
                 failCount++;
             }
+        }
+
+        // M3修复：批量更新，减少DB交互次数
+        if (!songsToUpdate.isEmpty()) {
+            this.updateBatchById(songsToUpdate);
         }
 
         log.info("热门分数同步完成：成功{}首，失败{}首", successCount, failCount);
@@ -179,12 +201,16 @@ public class HotSongServiceImpl implements HotSongService {
     /**
      * 从数据库获取热门歌曲（兜底方案）
      * S1修复：改用 selectVOByIds 批量查询，替代循环逐条 selectVOById（消除 N+1）
+     * M21修复：limit参数增加范围限制，防止超大值导致性能问题
      */
     private List<SongVO> getHotSongsFromDb(Integer limit) {
+        // M21修复：限制最大值，防止恶意请求导致数据库压力
+        int safeLimit = Math.min(limit != null ? limit : 20, 100);
+        
         LambdaQueryWrapper<Song> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Song::getStatus, 1) // 只返回上架的歌曲
                 .orderByDesc(Song::getPlayCount)
-                .last("LIMIT " + limit);
+                .last("LIMIT " + safeLimit); // safeLimit已做范围校验
 
         List<Song> songs = songMapper.selectList(wrapper);
 

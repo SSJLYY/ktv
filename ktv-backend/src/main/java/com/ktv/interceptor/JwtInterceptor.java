@@ -1,8 +1,9 @@
-﻿package com.ktv.interceptor;
+package com.ktv.interceptor;
 
 import com.ktv.common.exception.BusinessException;
 import com.ktv.common.result.ResultCode;
-import com.ktv.common.util.JwtUtil; // Bug17修复：原路径 com.ktv.util.JwtUtil 不存在，正确路径是 com.ktv.common.util.JwtUtil
+import com.ktv.common.util.JwtUtil;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 /**
  * JWT拦截器
  * 用于拦截需要认证的接口，验证JWT Token的有效性
+ * M25修复：优化Token解析，避免重复调用getClaimsFromToken
  * 
  * @author shaun.sheng
  * @since 2026-03-30
@@ -35,7 +37,6 @@ public class JwtInterceptor implements HandlerInterceptor {
         // Token为空
         if (token == null || token.isEmpty()) {
             log.warn("JWT Token为空，请求路径：{}", request.getRequestURI());
-            // BugE修复：BusinessException 无 (ResultCode, String) 构造器，使用 (Integer, String) 替代
             throw new BusinessException(ResultCode.UNAUTHORIZED.getCode(), "未登录，请先登录");
         }
 
@@ -46,16 +47,19 @@ public class JwtInterceptor implements HandlerInterceptor {
 
         // 验证Token
         try {
-            if (!jwtUtil.validateToken(token)) {
-                log.warn("JWT Token无效或已过期，请求路径：{}", request.getRequestURI());
-                // BugE修复：使用 (Integer, String) 构造器
+            // M25修复：只解析一次Claims，避免重复调用getClaimsFromToken
+            Claims claims = jwtUtil.getClaimsFromToken(token);
+            
+            // 检查是否过期
+            if (claims.getExpiration().before(new java.util.Date())) {
+                log.warn("JWT Token已过期，请求路径：{}", request.getRequestURI());
                 throw new BusinessException(ResultCode.UNAUTHORIZED.getCode(), "登录已过期，请重新登录");
             }
 
             // Token有效，将用户信息存入请求属性
-            Long userId = jwtUtil.getUserIdFromToken(token);
-            String username = jwtUtil.getUsernameFromToken(token);
-            String role = jwtUtil.getRoleFromToken(token);
+            Long userId = claims.get("userId", Long.class);
+            String username = claims.getSubject();
+            String role = claims.get("role", String.class);
 
             request.setAttribute("userId", userId);
             request.setAttribute("username", username);

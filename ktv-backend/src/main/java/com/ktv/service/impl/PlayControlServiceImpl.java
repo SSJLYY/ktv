@@ -49,7 +49,17 @@ public class PlayControlServiceImpl implements PlayControlService {
         // 1. 获取当前播放的点歌记录ID（S5修复：实际存的是 orderSongId 而非 songId）
         String playingKey = PLAYING_KEY_PREFIX + orderId;
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
-        Long currentOrderSongId = currentOrderSongIdStr != null ? Long.parseLong(currentOrderSongIdStr) : null;
+        Long currentOrderSongId = null;
+        
+        // H10修复：增加try-catch处理NumberFormatException
+        if (currentOrderSongIdStr != null) {
+            try {
+                currentOrderSongId = Long.parseLong(currentOrderSongIdStr);
+            } catch (NumberFormatException e) {
+                log.warn("当前播放记录ID格式错误，orderId={}, value={}", orderId, currentOrderSongIdStr);
+                redisTemplate.delete(playingKey); // 清除脏数据
+            }
+        }
 
         // 2. 如果有当前歌曲，标记为"已播放"
         if (currentOrderSongId != null) {
@@ -75,7 +85,14 @@ public class PlayControlServiceImpl implements PlayControlService {
             return;
         }
 
-        Long nextSongId = Long.parseLong(nextSongIdStr);
+        // H11修复：增加try-catch处理NumberFormatException
+        Long nextSongId;
+        try {
+            nextSongId = Long.parseLong(nextSongIdStr);
+        } catch (NumberFormatException e) {
+            log.warn("队列中歌曲ID格式错误，orderId={}, value={}", orderId, nextSongIdStr);
+            return;
+        }
 
         // 4. 将下一首设为"播放中"
         OrderSong nextSong = orderSongMapper.selectById(nextSongId);
@@ -110,7 +127,15 @@ public class PlayControlServiceImpl implements PlayControlService {
             throw new BusinessException("当前没有播放的歌曲");
         }
 
-        Long currentOrderSongId = Long.parseLong(currentOrderSongIdStr);
+        // H15修复：增加try-catch处理NumberFormatException
+        Long currentOrderSongId;
+        try {
+            currentOrderSongId = Long.parseLong(currentOrderSongIdStr);
+        } catch (NumberFormatException e) {
+            log.warn("当前播放记录ID格式错误，orderId={}, value={}", orderId, currentOrderSongIdStr);
+            redisTemplate.delete(playingKey); // 清除脏数据
+            throw new BusinessException("当前播放记录数据异常");
+        }
 
         // 2. 查询当前歌曲
         OrderSong currentSong = orderSongMapper.selectById(currentOrderSongId);
@@ -175,17 +200,28 @@ public class PlayControlServiceImpl implements PlayControlService {
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
 
         if (currentOrderSongIdStr != null) {
-            Long currentOrderSongId = Long.parseLong(currentOrderSongIdStr);
-            // 关联查询歌曲信息
-            OrderSong orderSong = orderSongMapper.findSongInfoById(currentOrderSongId);
-            if (orderSong != null) {
-                vo.setOrderSongId(orderSong.getId());
-                vo.setSongId(orderSong.getSongId());
-                vo.setSongName(orderSong.getSongName());
-                vo.setSingerName(orderSong.getSingerName());
-                vo.setDuration(orderSong.getDuration());
-                vo.setFilePath(orderSong.getFilePath());
-                vo.setPlayTime(orderSong.getPlayTime());
+            // H16修复：增加try-catch处理NumberFormatException
+            Long currentOrderSongId;
+            try {
+                currentOrderSongId = Long.parseLong(currentOrderSongIdStr);
+            } catch (NumberFormatException e) {
+                log.warn("当前播放记录ID格式错误，orderId={}, value={}", orderId, currentOrderSongIdStr);
+                redisTemplate.delete(playingKey); // 清除脏数据
+                currentOrderSongId = null;
+            }
+            
+            if (currentOrderSongId != null) {
+                // 关联查询歌曲信息
+                OrderSong orderSong = orderSongMapper.findSongInfoById(currentOrderSongId);
+                if (orderSong != null) {
+                    vo.setOrderSongId(orderSong.getId());
+                    vo.setSongId(orderSong.getSongId());
+                    vo.setSongName(orderSong.getSongName());
+                    vo.setSingerName(orderSong.getSingerName());
+                    vo.setDuration(orderSong.getDuration());
+                    vo.setFilePath(orderSong.getFilePath());
+                    vo.setPlayTime(orderSong.getPlayTime());
+                }
             }
         }
 

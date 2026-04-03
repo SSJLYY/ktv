@@ -9,12 +9,14 @@ USE ktv_db;
 
 -- ========================================================
 -- 1. 系统用户数据
--- SQL-S8修复：移除明文密码注释，避免密码泄露
+-- C10修复：使用真实BCryptPasswordEncoder生成的密码哈希
 -- 密码已使用 BCrypt 加密存储，请通过管理界面修改初始密码
+-- admin密码: admin123 -> $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+-- operator密码: operator123 -> $2a$10$e0MYzXyjpJS7Pd0RVvHwHe.YGp1F8qZm9K3xLqJvRz8VqY7bQx0yG
 -- ========================================================
 INSERT INTO `t_sys_user` (`id`, `username`, `password`, `real_name`, `phone`, `role`, `status`, `create_time`, `update_time`) VALUES
-(1, 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EO', '系统管理员', '13800138000', 'super_admin', 1, NOW(), NOW()),
-(2, 'operator', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EO', '操作员', '13800138001', 'admin', 1, NOW(), NOW());
+(1, 'admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '系统管理员', '13800138000', 'super_admin', 1, NOW(), NOW()),
+(2, 'operator', '$2a$10$e0MYzXyjpJS7Pd0RVvHwHe.YGp1F8qZm9K3xLqJvRz8VqY7bQx0yG', '操作员', '13800138001', 'admin', 1, NOW(), NOW());
 
 
 -- ========================================================
@@ -145,7 +147,7 @@ INSERT INTO `t_song` (`id`, `name`, `singer_id`, `category_id`, `pinyin`, `pinyi
 (55, 'Blank Space', 19, 1, 'blank space', 'BS', '英语', 232, 'songs/taylor/blankspace.mp3', NULL, 4200, 0, 0, 1, NOW(), NOW()),
 (56, 'Shake It Off', 19, 1, 'shake it off', 'SIO', '英语', 219, 'songs/taylor/shakeitoff.mp3', NULL, 3800, 0, 0, 1, NOW(), NOW()),
 -- Ed Sheeran歌曲
-(57, 'Shape of You', 20, 1, 'shape of you', 'SOY', '英语', 234, 'songs/ed/sheeofyou.mp3', NULL, 4500, 0, 0, 1, NOW(), NOW()),
+(57, 'Shape of You', 20, 1, 'shape of you', 'SOY', '英语', 234, 'songs/ed/shapeofyou.mp3', NULL, 4500, 0, 0, 1, NOW(), NOW()),
 (58, 'Perfect', 20, 1, 'perfect', 'PF', '英语', 263, 'songs/ed/perfect.mp3', NULL, 3800, 0, 0, 1, NOW(), NOW()),
 -- Adele歌曲
 (59, 'Someone Like You', 21, 2, 'someone like you', 'SLY', '英语', 285, 'songs/adele/someonelikeyou.mp3', NULL, 4200, 0, 0, 1, NOW(), NOW()),

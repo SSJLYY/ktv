@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -150,8 +150,8 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setPinyinInitial(existSong.getPinyinInitial());
         }
 
-        // 如果修改了歌手，更新两个歌手的歌曲数量（S13修复：使用 SQL 原子更新）
-        if (!existSong.getSingerId().equals(song.getSingerId())) {
+        // H5修复：如果修改了歌手，使用Objects.equals防止NPE
+        if (!java.util.Objects.equals(existSong.getSingerId(), song.getSingerId())) {
             singerService.update().eq("id", existSong.getSingerId())
                     .setSql("song_count = GREATEST(song_count - 1, 0)").update();
             singerService.update().eq("id", song.getSingerId())

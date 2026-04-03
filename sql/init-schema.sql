@@ -32,8 +32,9 @@ CREATE TABLE `t_singer` (
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted` TINYINT DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
     PRIMARY KEY (`id`),
+    -- M17修复：添加唯一约束，防止同一地区插入同名歌手
+    UNIQUE KEY `uk_name_region` (`name`, `region`),
     KEY `idx_pinyin_initial` (`pinyin_initial`),
-    KEY `idx_name` (`name`),
     KEY `idx_region` (`region`),
     KEY `idx_status_deleted` (`status`, `deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='歌手表';
@@ -53,6 +54,8 @@ CREATE TABLE `t_category` (
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted` TINYINT DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
     PRIMARY KEY (`id`),
+    -- M18修复：添加唯一约束，防止重复分类名
+    UNIQUE KEY `uk_name` (`name`),
     KEY `idx_sort_order` (`sort_order`),
     KEY `idx_status_deleted` (`status`, `deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='歌曲分类表';
@@ -91,7 +94,7 @@ CREATE TABLE `t_song` (
     KEY `idx_is_hot` (`is_hot`),
     KEY `idx_is_new` (`is_new`),
     KEY `idx_status_deleted` (`status`, `deleted`),
-    KEY `idx_name` (`name`),
+    -- M19修复：移除低效的idx_name索引，LIKE '%keyword%'无法使用前缀索引
     -- 复合索引：用于按分类+热度查询
     KEY `idx_category_hot` (`category_id`, `play_count` DESC),
     -- 复合索引：用于按歌手+状态查询
@@ -188,7 +191,9 @@ CREATE TABLE `t_order_song` (
     -- 复合索引：用于查询某订单的点歌列表（按状态+排序）
     KEY `idx_order_status_sort` (`order_id`, `status`, `sort_order`),
     -- 复合索引：用于查询某订单的已点/已唱列表
-    KEY `idx_order_create` (`order_id`, `create_time` DESC)
+    KEY `idx_order_create` (`order_id`, `create_time` DESC),
+    -- L8修复：添加(order_id, song_id)唯一约束，防止同一订单重复点同一首歌
+    UNIQUE KEY `uk_order_song` (`order_id`, `song_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='点歌记录表';
 
 

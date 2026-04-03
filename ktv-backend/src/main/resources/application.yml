@@ -6,24 +6,26 @@ spring:
     name: ktv-backend
 
   # 数据源配置
+  # M5/M6/M14修复：使用环境变量注入敏感配置，避免硬编码
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/ktv?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root
-    password: root
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/ktv_db?useUnicode=true&characterEncoding=utf8&useSSL=${DB_USE_SSL:false}&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY:true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:Qq123456}
 
   # Redis配置
+  # M7/M9修复：Redis密码使用环境变量，连接池max-wait设置合理超时
   data:
     redis:
-      host: localhost
-      port: 6379
-      password:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       database: 0
       timeout: 3000ms
       lettuce:
         pool:
           max-active: 8
-          max-wait: -1ms
+          max-wait: 3000ms  # M9修复：从-1ms改为3000ms，避免无限等待导致线程饥饿
           max-idle: 8
           min-idle: 0
 
@@ -34,8 +36,9 @@ spring:
       max-request-size: 200MB
 
 # 媒体文件基础路径配置
+# M8修复：支持Windows和Linux路径，通过环境变量配置
 media:
-  base-path: D:/ktv-media
+  base-path: ${MEDIA_BASE_PATH:/data/ktv-media}
 
 # 跨域配置（S9修复：支持通过环境变量动态配置，生产环境通过 CORS_ALLOWED_ORIGINS 设置）
 cors:
@@ -50,7 +53,8 @@ jwt:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # M17修复：生产环境应关闭SQL日志输出，避免暴露敏感数据
+    log-impl: ${MYBATIS_LOG_IMPL:org.apache.ibatis.logging.stdout.StdOutImpl}
   global-config:
     db-config:
       id-type: auto
@@ -60,7 +64,15 @@ mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
 
 # 日志配置
+# L4修复：增加日志文件输出配置，避免容器重启后日志丢失
 logging:
   level:
     com.ktv: debug
     org.springframework.web: info
+  file:
+    name: logs/ktv-backend.log
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+      total-size-cap: 3GB

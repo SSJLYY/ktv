@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ktv.common.exception.BusinessException;
@@ -14,6 +14,9 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.regex.Pattern;
 
 /**
  * 媒体文件Service实现类
@@ -30,8 +33,9 @@ public class MediaServiceImpl implements MediaService {
 
     /**
      * 媒体文件基础路径（从配置文件读取）
+     * C8修复：使用 ${media.base-path} 让 yml 默认值生效，避免 Java 代码覆盖
      */
-    @Value("${media.base-path:D:/ktv-media}")
+    @Value("${media.base-path}")
     private String mediaBasePath;
 
     /**
@@ -88,7 +92,13 @@ public class MediaServiceImpl implements MediaService {
     }
 
     /**
+     * M4修复：编译正则表达式为静态常量，避免每次调用时重新编译
+     */
+    private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("^[A-Za-z]:.*");
+
+    /**
      * 获取歌曲封面图
+     * C3修复：添加路径穿越检查
      */
     @Override
     public Resource getCoverImage(Long songId) {
@@ -111,9 +121,15 @@ public class MediaServiceImpl implements MediaService {
             return null;
         }
 
+        // C3修复：检查路径穿越字符
+        if (coverUrl.contains("..")) {
+            log.warn("封面图路径包含路径穿越字符：{}", coverUrl);
+            return getDefaultCover();
+        }
+
         // 本地文件路径（可能是相对路径，如 /covers/1.jpg 或 covers/1.jpg）
         String absolutePath;
-        if (coverUrl.startsWith("/") || coverUrl.matches("^[A-Za-z]:.*")) {
+        if (coverUrl.startsWith("/") || WINDOWS_PATH_PATTERN.matcher(coverUrl).matches()) {
             // 以/开头的相对路径（如 /covers/1.jpg）或绝对路径，都拼上 mediaBasePath（去掉开头的 /）
             if (coverUrl.startsWith("/")) {
                 absolutePath = mediaBasePath + coverUrl;
@@ -124,7 +140,15 @@ public class MediaServiceImpl implements MediaService {
             absolutePath = mediaBasePath + "/" + coverUrl;
         }
 
-        File coverFile = new File(absolutePath);
+        // C3修复：使用Path.normalize()验证最终路径仍在mediaBasePath下
+        Path normalizedPath = Paths.get(absolutePath).normalize().toAbsolutePath();
+        Path basePath = Paths.get(mediaBasePath).normalize().toAbsolutePath();
+        if (!normalizedPath.startsWith(basePath)) {
+            log.warn("封面图路径超出mediaBasePath范围：{}", absolutePath);
+            return getDefaultCover();
+        }
+
+        File coverFile = normalizedPath.toFile();
         if (!coverFile.exists()) {
             // 按 songId 扫描 covers 目录查找任意扩展名的封面
             File coversDir = new File(mediaBasePath + "/covers");
@@ -155,6 +179,7 @@ public class MediaServiceImpl implements MediaService {
 
     /**
      * 获取歌曲文件路径
+     * C4修复：添加路径穿越检查
      */
     private String getFilePath(Long songId) {
         Song song = songMapper.selectById(songId);
@@ -169,13 +194,30 @@ public class MediaServiceImpl implements MediaService {
             return null;
         }
 
-        // 如果是绝对路径，直接返回
-        if (filePath.startsWith("/") || filePath.matches("^[A-Za-z]:.*")) {
-            return filePath;
+        // C4修复：检查路径穿越字符
+        if (filePath.contains("..")) {
+            log.warn("文件路径包含路径穿越字符：{}", filePath);
+            return null;
         }
 
-        // 相对路径，拼接媒体基础路径
-        return mediaBasePath + "/" + filePath;
+        String finalPath;
+        // 如果是绝对路径，直接使用但需要验证
+        if (filePath.startsWith("/") || WINDOWS_PATH_PATTERN.matcher(filePath).matches()) {
+            finalPath = filePath;
+        } else {
+            // 相对路径，拼接媒体基础路径
+            finalPath = mediaBasePath + "/" + filePath;
+        }
+
+        // C4修复：验证最终路径是否在mediaBasePath范围内
+        Path normalizedPath = Paths.get(finalPath).normalize().toAbsolutePath();
+        Path basePath = Paths.get(mediaBasePath).normalize().toAbsolutePath();
+        if (!normalizedPath.startsWith(basePath)) {
+            log.warn("文件路径超出mediaBasePath范围：{}", finalPath);
+            return null;
+        }
+
+        return normalizedPath.toString();
     }
 
     /**

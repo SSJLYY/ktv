@@ -1,4 +1,4 @@
-﻿package com.ktv.common.util;
+package com.ktv.common.util;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -166,6 +166,7 @@ public class JwtUtil {
 
     /**
      * 验证Token是否有效（同时校验用户名）
+     * H8修复：增加null检查，防止tokenUsername为null时NPE
      *
      * @param token    JWT Token
      * @param username 用户名
@@ -174,7 +175,7 @@ public class JwtUtil {
     public Boolean validateToken(String token, String username) {
         try {
             String tokenUsername = getUsernameFromToken(token);
-            return tokenUsername.equals(username) && !isTokenExpired(token);
+            return tokenUsername != null && tokenUsername.equals(username) && !isTokenExpired(token);
         } catch (Exception e) {
             return false;
         }

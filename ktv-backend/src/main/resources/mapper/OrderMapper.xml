@@ -28,6 +28,7 @@
          而 convertToVO 补查时用 operator.getRealName() 返回真实姓名，两者不一致。
          统一改为 su1.real_name AS operator_name，与补查逻辑保持一致。 -->
     <!-- S2修复：增加 LEFT JOIN su2 查询 closer_name，消除分页场景下 closerName 的 N+1 查询 -->
+    <!-- H14修复：关联 t_sys_user 时增加 deleted = 0 过滤，避免关联到已删除用户 -->
     <select id="selectOrderPage" resultType="com.ktv.entity.Order">
         SELECT
             <include refid="Base_Column_List"/>,
@@ -37,8 +38,8 @@
             su2.real_name AS closer_name
         FROM t_order o
         LEFT JOIN t_room r ON o.room_id = r.id AND r.deleted = 0
-        LEFT JOIN t_sys_user su1 ON o.operator_id = su1.id
-        LEFT JOIN t_sys_user su2 ON o.closer_id = su2.id
+        LEFT JOIN t_sys_user su1 ON o.operator_id = su1.id AND su1.deleted = 0
+        LEFT JOIN t_sys_user su2 ON o.closer_id = su2.id AND su2.deleted = 0
         WHERE o.deleted = 0
         <if test="startDate != null">
             AND o.start_time &gt;= #{startDate}

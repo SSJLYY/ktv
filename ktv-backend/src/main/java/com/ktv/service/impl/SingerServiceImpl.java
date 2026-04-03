@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -94,10 +94,10 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
         BeanUtils.copyProperties(singerDTO, singer);
         singer.setId(id);
 
-        // 如果修改了歌手名，更新拼音
+        // H9修复：如果修改了歌手名，更新拼音（使用singerDTO.getName()而非singer.getName()）
         if (!existSinger.getName().equals(singerDTO.getName())) {
-            singer.setPinyin(PinyinUtil.getPinyin(singer.getName()));
-            singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singer.getName()));
+            singer.setPinyin(PinyinUtil.getPinyin(singerDTO.getName()));
+            singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singerDTO.getName()));
         } else {
             singer.setPinyin(existSinger.getPinyin());
             singer.setPinyinInitial(existSinger.getPinyinInitial());

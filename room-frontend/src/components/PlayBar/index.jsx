@@ -145,6 +145,12 @@ export default function PlayBar({ onVideoPlay }) {
       }],
     })
 
+    // M27修复：添加APlayer错误处理
+    ap.on('error', () => {
+      console.error('APlayer播放错误')
+      Toast.show({ content: '音频播放失败，请检查文件', icon: 'fail' })
+    })
+
     // 保存回调函数引用
     callbacksRef.current = {
       onEnded: async () => {

@@ -1,4 +1,4 @@
-﻿package com.ktv.controller.admin;
+package com.ktv.controller.admin;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -46,8 +46,9 @@ public class SongController {
 
     /**
      * 媒体文件基础路径
+     * C8修复：使用 ${media.base-path} 让 yml 默认值生效，避免 Java 代码覆盖
      */
-    @Value("${media.base-path:D:/ktv-media}")
+    @Value("${media.base-path}")
     private String mediaBasePath;
 
     /**
@@ -194,21 +195,42 @@ public class SongController {
         }
 
         try {
+            // C2修复：校验singerId合法性，必须是正整数
+            Long singerId = song.getSingerId();
+            if (singerId == null || singerId <= 0) {
+                throw new BusinessException("歌手ID无效");
+            }
+
             // 创建目录结构：{media.base-path}/{singer_id}/
-            File singerDir = new File(mediaBasePath + "/" + song.getSingerId());
+            Path singerDirPath = Paths.get(mediaBasePath, singerId.toString()).normalize();
+            
+            // C2修复：验证路径是否在mediaBasePath下，防止路径穿越
+            Path basePath = Paths.get(mediaBasePath).normalize().toAbsolutePath();
+            if (!singerDirPath.toAbsolutePath().startsWith(basePath)) {
+                throw new BusinessException("非法的文件路径");
+            }
+
+            File singerDir = singerDirPath.toFile();
             if (!singerDir.exists()) {
                 singerDir.mkdirs();
             }
 
             // 生成文件名：{song_id}.{ext}
             String newFileName = songId + "." + extension;
-            File targetFile = new File(singerDir, newFileName);
+            Path targetFilePath = singerDirPath.resolve(newFileName).normalize();
+            
+            // C2修复：再次验证完整路径
+            if (!targetFilePath.toAbsolutePath().startsWith(basePath)) {
+                throw new BusinessException("非法的文件路径");
+            }
+            
+            File targetFile = targetFilePath.toFile();
 
             // 保存文件
             file.transferTo(targetFile);
 
             // 更新数据库中的文件路径（相对路径）
-            String relativePath = song.getSingerId() + "/" + newFileName;
+            String relativePath = singerId + "/" + newFileName;
             song.setFilePath(relativePath);
             songMapper.updateById(song);
 
@@ -229,7 +251,7 @@ public class SongController {
 
         } catch (IOException e) {
             log.error("文件上传失败", e);
-            throw new BusinessException("文件上传失败：" + e.getMessage());
+            throw new BusinessException("文件上传失败，请稍后重试");
         }
     }
 
@@ -310,7 +332,8 @@ public class SongController {
             result.setFileName(newFileName);
             result.setFilePath(relativePath);
             result.setFileSize(file.getSize());
-            result.setMediaType("image/" + extension);
+            // M22修复：使用正确的MIME类型，而非简单拼接
+            result.setMediaType(MediaUtils.getImageMediaType(extension));
 
             return Result.success(result);
 

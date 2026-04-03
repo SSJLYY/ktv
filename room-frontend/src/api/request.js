@@ -22,7 +22,8 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     const res = response.data
-    if (res.code === 200) {
+    // H19修复：同时支持 code === 200 和 code === 0（后端统一响应格式）
+    if (res.code === 200 || res.code === 0) {
       return res
     }
     Toast.show({ icon: 'fail', content: res.message || '请求失败' })

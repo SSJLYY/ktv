@@ -109,7 +109,7 @@
           AND (
             s.name LIKE CONCAT('%', #{keyword}, '%')
             OR s.pinyin_initial LIKE CONCAT('%', UPPER(#{keyword}), '%')
-            OR s.pinyin LIKE CONCAT('%', UPPER(#{keyword}), '%')
+            OR s.pinyin LIKE CONCAT('%', LOWER(#{keyword}), '%')
           )
         ORDER BY
           CASE WHEN s.name LIKE CONCAT('%', #{keyword}, '%') THEN 0 ELSE 1 END,

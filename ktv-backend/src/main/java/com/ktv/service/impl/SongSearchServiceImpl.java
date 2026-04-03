@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -52,24 +52,16 @@ public class SongSearchServiceImpl implements SongSearchService {
 
     @Override
     public IPage<SongVO> getSongsBySinger(Long singerId, Long pageNum, Long pageSize) {
-        // 校验歌手是否存在
-        Singer singer = singerMapper.selectById(singerId);
-        if (singer == null) {
-            throw new BusinessException("歌手不存在");
-        }
-
+        // M23修复：移除冗余的selectById检查，直接分页查询
+        // 如果歌手不存在，selectBySingerId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
         return songMapper.selectBySingerId(page, singerId);
     }
 
     @Override
     public IPage<SongVO> getSongsByCategory(Long categoryId, Long pageNum, Long pageSize) {
-        // 校验分类是否存在
-        Category category = categoryMapper.selectById(categoryId);
-        if (category == null) {
-            throw new BusinessException("分类不存在");
-        }
-
+        // M24修复：移除冗余的selectById检查，直接分页查询
+        // 如果分类不存在，selectByCategoryId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
         return songMapper.selectByCategoryId(page, categoryId);
     }

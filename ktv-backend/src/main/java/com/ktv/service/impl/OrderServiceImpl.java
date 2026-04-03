@@ -1,4 +1,4 @@
-﻿package com.ktv.service.impl;
+package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -113,8 +113,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("包厢不存在");
         }
 
-        // 2. 检查包厢状态是否为"空闲"
-        if (room.getStatus() != 0) {
+        // 2. H1修复：检查包厢状态是否为"空闲"，防止NPE
+        Integer roomStatus = room.getStatus();
+        if (roomStatus == null || roomStatus != 0) {
             throw new BusinessException("包厢当前状态不允许开台，请选择空闲包厢");
         }
 
@@ -166,8 +167,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("订单不存在");
         }
 
-        // 2. 检查订单状态是否为"消费中"
-        if (order.getStatus() != 1) {
+        // 2. H2修复：检查订单状态是否为"消费中"，防止NPE
+        Integer orderStatus = order.getStatus();
+        if (orderStatus == null || orderStatus != 1) {
             throw new BusinessException("订单状态不允许结账");
         }
 
@@ -184,9 +186,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("包厢不存在");
         }
 
-        // 5. 计算包厢费用 = 单价 * 时长(小时)
+        // 5. H3修复：计算包厢费用 = 单价 * 时长(小时)，防止pricePerHour为null
+        BigDecimal pricePerHour = room.getPricePerHour();
+        if (pricePerHour == null) {
+            throw new BusinessException("包厢价格未设置");
+        }
         BigDecimal hours = BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.UP);
-        BigDecimal roomAmount = room.getPricePerHour().multiply(hours).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal roomAmount = pricePerHour.multiply(hours).setScale(2, RoundingMode.HALF_UP);
 
         // 6. 计算总费用（目前只有包厢费，后续可扩展其他费用）
         BigDecimal totalAmount = roomAmount;
@@ -249,7 +255,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("订单不存在");
         }
 
-        if (order.getStatus() != 1) {
+        // H4修复：检查订单状态，防止NPE
+        Integer orderStatus = order.getStatus();
+        if (orderStatus == null || orderStatus != 1) {
             throw new BusinessException("只有消费中的订单才能取消");
         }
 
@@ -305,21 +313,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                 .statusText(order.getStatusText())
                 .roomName(roomName)
                 .build();
-    }
-
-    /**
-     * 清空指定订单的Redis排队队列
-     * BugD修复：Key 格式应为 ktv:queue:{orderId}，与 PlayQueueServiceImpl 保持一致
-     */
-    private void clearRoomQueue(Long orderId) {
-        try {
-            String queueKey = REDIS_QUEUE_KEY_PREFIX + orderId;
-            redisTemplate.delete(queueKey);
-            log.debug("已清空订单{}的排队队列", orderId);
-        } catch (Exception e) {
-            log.warn("清空排队队列失败: {}", e.getMessage());
-            // 不影响主流程
-        }
     }
 
     /**
