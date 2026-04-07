@@ -88,7 +88,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         List<SongVO> allVos = songMapper.selectVOByIds(songIds);
         // 按 songIds 的顺序返回（Redis ZSet 已按热度排序）
         Map<Long, SongVO> voMap = allVos.stream()
-                .filter(vo -> vo.getStatus() == 1)
+                .filter(vo -> vo.getStatus() != null && vo.getStatus() == 1)
                 .collect(Collectors.toMap(SongVO::getId, Function.identity(), (a, b) -> a));
 
         List<SongVO> result = new ArrayList<>();

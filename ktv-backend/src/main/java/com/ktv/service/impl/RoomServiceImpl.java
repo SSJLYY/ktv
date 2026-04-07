@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ktv.common.enums.RoomStatusEnum;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.dto.RoomDTO;
 import com.ktv.entity.Room;
@@ -108,9 +109,11 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
 
         // 检查包厢名是否与其他包厢重复
-        if (!existRoom.getName().equals(roomDTO.getName())) {
+        String newName = roomDTO.getName();
+        if (newName == null || !existRoom.getName().equals(newName)) {
+            String checkName = newName != null ? newName : existRoom.getName();
             LambdaQueryWrapper<Room> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(Room::getName, roomDTO.getName());
+            queryWrapper.eq(Room::getName, checkName);
             queryWrapper.ne(Room::getId, id);
             Long count = roomMapper.selectCount(queryWrapper);
             if (count > 0) {
@@ -151,8 +154,8 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
 
         // 仅允许删除状态为"空闲"的包厢
-        if (existRoom.getStatus() != 0) {
-            throw new BusinessException("仅允许删除状态为"空闲"的包厢");
+        if (existRoom.getStatus() == null || existRoom.getStatus() != RoomStatusEnum.AVAILABLE.getCode()) {
+            throw new BusinessException("仅允许删除状态为\"空闲\"的包厢");
         }
 
         boolean deleted = roomMapper.deleteById(id) > 0;
@@ -177,8 +180,8 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             throw new BusinessException("包厢不存在");
         }
 
-        // 校验状态值
-        if (status < 0 || status > 3) {
+        // 校验状态值合法性
+        if (status < RoomStatusEnum.AVAILABLE.getCode() || status > RoomStatusEnum.MAINTENANCE.getCode()) {
             throw new BusinessException("无效的状态值");
         }
 

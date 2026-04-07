@@ -24,15 +24,20 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
+    <!-- O4修复：抽取重复的歌曲VO列定义，避免多处重复 -->
+    <sql id="Song_VO_Columns">
+        s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
+        s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
+        s.play_count, s.is_hot, s.is_new, s.status,
+        s.create_time, s.update_time,
+        sg.name as singer_name,
+        c.name as category_name
+    </sql>
+
     <!-- 根据ID查询单首歌曲（含歌手名、分类名，不过滤status） -->
     <select id="selectVOById" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
@@ -42,12 +47,7 @@
     <!-- S1修复：根据ID列表批量查询歌曲（含歌手名、分类名） -->
     <select id="selectVOByIds" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
@@ -65,12 +65,7 @@
     -->
     <select id="selectPageWithConditions" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
@@ -96,12 +91,7 @@
     <!-- 按歌曲名或拼音首字母模糊搜索 -->
     <select id="searchByKeyword" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
@@ -120,12 +110,7 @@
     <!-- 按歌手查询歌曲（分页） -->
     <select id="selectBySingerId" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0
@@ -136,12 +121,7 @@
     <!-- 按分类查询歌曲（分页） -->
     <select id="selectByCategoryId" resultMap="SongVOMap">
         SELECT
-            s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
-            s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
-            s.play_count, s.is_hot, s.is_new, s.status,
-            s.create_time, s.update_time,
-            sg.name as singer_name,
-            c.name as category_name
+            <include refid="Song_VO_Columns"/>
         FROM t_song s
         LEFT JOIN t_singer sg ON s.singer_id = sg.id AND sg.deleted = 0
         LEFT JOIN t_category c ON s.category_id = c.id AND c.deleted = 0

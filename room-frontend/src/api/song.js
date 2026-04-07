@@ -3,16 +3,16 @@ import request from './request'
 // ========== 歌曲检索 ==========
 
 /** 搜索歌曲（按歌名/拼音） */
-export const searchSongs = (keyword, pageNum = 1, pageSize = 20) =>
-  request.get('/api/room/songs/search', { params: { keyword, pageNum, pageSize } })
+export const searchSongs = (keyword, current = 1, size = 20) =>
+  request.get('/api/room/songs/search', { params: { keyword, current, size } })
 
 /** 按歌手查歌 */
-export const getSongsBySinger = (singerId, pageNum = 1, pageSize = 20) =>
-  request.get(`/api/room/songs/by-singer/${singerId}`, { params: { pageNum, pageSize } })
+export const getSongsBySinger = (singerId, current = 1, size = 20) =>
+  request.get(`/api/room/songs/by-singer/${singerId}`, { params: { current, size } })
 
 /** 按分类查歌 */
-export const getSongsByCategory = (categoryId, pageNum = 1, pageSize = 20) =>
-  request.get(`/api/room/songs/by-category/${categoryId}`, { params: { pageNum, pageSize } })
+export const getSongsByCategory = (categoryId, current = 1, size = 20) =>
+  request.get(`/api/room/songs/by-category/${categoryId}`, { params: { current, size } })
 
 /** 获取所有歌手 */
 export const getAllSingers = (pinyinInitial) =>

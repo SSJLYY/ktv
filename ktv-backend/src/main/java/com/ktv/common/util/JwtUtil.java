@@ -156,9 +156,8 @@ public class JwtUtil {
      */
     public Boolean validateToken(String token) {
         try {
-            // parseSignedClaims 会验证签名和过期时间，抛异常说明无效
             getClaimsFromToken(token);
-            return !isTokenExpired(token);
+            return true;
         } catch (Exception e) {
             return false;
         }

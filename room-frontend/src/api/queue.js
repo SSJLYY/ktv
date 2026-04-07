@@ -15,9 +15,9 @@ export const removeSong = (orderId, orderSongId) =>
   request.delete(`/api/room/${orderId}/queue/remove/${orderSongId}`)
 
 /** 查询排队列表 */
-export const getQueueList = (orderId, page = 1, size = 50) =>
-  request.get(`/api/room/${orderId}/queue`, { params: { page, size } })
+export const getQueueList = (orderId, current = 1, size = 50) =>
+  request.get(`/api/room/${orderId}/queue`, { params: { current, size } })
 
 /** 查询已唱列表 */
-export const getPlayedList = (orderId, page = 1, size = 50) =>
-  request.get(`/api/room/${orderId}/queue/played`, { params: { page, size } })
+export const getPlayedList = (orderId, current = 1, size = 50) =>
+  request.get(`/api/room/${orderId}/queue/played`, { params: { current, size } })

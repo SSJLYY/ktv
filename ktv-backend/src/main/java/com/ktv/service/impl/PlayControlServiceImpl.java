@@ -1,6 +1,7 @@
 package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ktv.common.enums.OrderSongStatusEnum;
 import com.ktv.dto.CurrentPlayVO;
 import com.ktv.entity.OrderSong;
 import com.ktv.common.exception.BusinessException;
@@ -65,7 +66,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         if (currentOrderSongId != null) {
             OrderSong currentSong = orderSongMapper.selectById(currentOrderSongId);
             if (currentSong != null && currentSong.isPlaying()) {
-                currentSong.setStatus(2); // 已播放
+                currentSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
                 currentSong.setFinishTime(LocalDateTime.now());
                 orderSongMapper.updateById(currentSong);
             }
@@ -101,7 +102,7 @@ public class PlayControlServiceImpl implements PlayControlService {
             return;
         }
 
-        nextSong.setStatus(1); // 播放中
+        nextSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
         nextSong.setPlayTime(LocalDateTime.now());
         orderSongMapper.updateById(nextSong);
 

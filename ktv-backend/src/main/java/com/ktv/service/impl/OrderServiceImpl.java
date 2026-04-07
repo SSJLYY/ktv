@@ -3,6 +3,8 @@ package com.ktv.service.impl;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ktv.common.enums.RoomStatusEnum;
+import com.ktv.common.enums.OrderStatusEnum;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.dto.OrderOpenDTO;
 import com.ktv.entity.Order;
@@ -115,7 +117,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // 2. H1修复：检查包厢状态是否为"空闲"，防止NPE
         Integer roomStatus = room.getStatus();
-        if (roomStatus == null || roomStatus != 0) {
+        if (roomStatus == null || roomStatus != RoomStatusEnum.AVAILABLE.getCode()) {
             throw new BusinessException("包厢当前状态不允许开台，请选择空闲包厢");
         }
 
@@ -133,7 +135,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setOrderNo(orderNo);
         order.setRoomId(openDTO.getRoomId());
         order.setStartTime(LocalDateTime.now());
-        order.setStatus(1); // 1=消费中
+        order.setStatus(OrderStatusEnum.CONSUMING.getCode()); // 消费中
         order.setOperatorId(operatorId);
         order.setRemark(openDTO.getRemark());
         order.setRoomAmount(BigDecimal.ZERO);
@@ -142,7 +144,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         orderMapper.insert(order);
 
         // 6. 更新包厢状态为"使用中"
-        roomService.updateRoomStatus(openDTO.getRoomId(), 1);
+        roomService.updateRoomStatus(openDTO.getRoomId(), RoomStatusEnum.IN_USE.getCode());
 
         // 7. Bug7修复：清空该订单相关的所有Redis播放状态key
         // 包括：队列 ktv:queue:{orderId}、当前播放 ktv:playing:{orderId}、播放状态 ktv:play:status:{orderId}
@@ -169,56 +171,62 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // 2. H2修复：检查订单状态是否为"消费中"，防止NPE
         Integer orderStatus = order.getStatus();
-        if (orderStatus == null || orderStatus != 1) {
+        if (orderStatus == null || orderStatus != OrderStatusEnum.CONSUMING.getCode()) {
             throw new BusinessException("订单状态不允许结账");
         }
 
-        // 3. 计算时长和费用
+        // C-1修复：使用原子更新防止并发结账竞态
+        // 先计算费用，再用 updateOrderStatusWithCondition 原子更新（WHERE id=? AND status=1）
         LocalDateTime endTime = LocalDateTime.now();
         long minutes = Duration.between(order.getStartTime(), endTime).toMinutes();
         if (minutes < 1) {
-            minutes = 1; // 最少计费1分钟
+            minutes = 1;
         }
 
-        // 4. 查询包厢信息获取单价
         Room room = roomMapper.selectById(order.getRoomId());
         if (room == null) {
             throw new BusinessException("包厢不存在");
         }
 
-        // 5. H3修复：计算包厢费用 = 单价 * 时长(小时)，防止pricePerHour为null
         BigDecimal pricePerHour = room.getPricePerHour();
         if (pricePerHour == null) {
             throw new BusinessException("包厢价格未设置");
         }
         BigDecimal hours = BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.UP);
         BigDecimal roomAmount = pricePerHour.multiply(hours).setScale(2, RoundingMode.HALF_UP);
-
-        // 6. 计算总费用（目前只有包厢费，后续可扩展其他费用）
         BigDecimal totalAmount = roomAmount;
 
-        // 7. 更新订单
-        order.setEndTime(endTime);
-        order.setDurationMinutes((int) minutes);
-        order.setRoomAmount(roomAmount);
-        order.setTotalAmount(totalAmount);
-        order.setStatus(2); // 2=已结账
-        order.setCloserId(closerId);
+        // C-1修复：原子更新，只有status=1的订单才能被结账
+        int updated = orderMapper.atomicCloseOrder(order.getId(), endTime, (int) minutes, roomAmount, totalAmount, closerId);
+        if (updated == 0) {
+            throw new BusinessException("订单状态已变更，结账失败");
+        }
 
-        orderMapper.updateById(order);
+        // 更新包厢状态为"清洁中"
+        roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.CLEANING.getCode());
 
-        // 8. 更新包厢状态为"清洁中"
-        roomService.updateRoomStatus(order.getRoomId(), 2);
+        // 9. 清理点歌队列
+        try {
+            String queueKey = "ktv:queue:" + orderId;
+            Long queueSize = redisTemplate.opsForList().size(queueKey);
+            if (queueSize != null && queueSize > 0) {
+                redisTemplate.delete(queueKey);
+                log.info("结账时已清理订单{}的点歌队列，共{}首歌曲", orderId, queueSize);
+            }
+        } catch (Exception e) {
+            log.warn("清理点歌队列失败（不影响结账）: {}", e.getMessage());
+        }
 
-        // 9. 清除Redis中的当前订单记录 + 播放相关状态
-        // Bug7修复：结账时一并清理 playing key 和 play:status key，
-        // 防止旧播放状态在下一个订单开台时残留，导致新订单看到旧歌曲
+        // 10. 清除Redis中的当前订单记录 + 播放相关状态
         redisTemplate.delete(REDIS_CURRENT_ORDER_KEY + order.getRoomId());
         clearPlaybackKeys(orderId);
 
-        log.info("结账成功：订单号={}, 时长={}分钟, 费用={}元", order.getOrderNo(), minutes, totalAmount);
+        // 11. 重新查询订单获取最新数据（原子更新后 order 对象已过时）
+        Order updatedOrder = orderMapper.selectById(orderId);
 
-        return convertToVO(order);
+        log.info("结账成功：订单号={}, 时长={}分钟, 费用={}元", updatedOrder.getOrderNo(), minutes, totalAmount);
+
+        return convertToVO(updatedOrder);
     }
 
     @Override
@@ -257,17 +265,16 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // H4修复：检查订单状态，防止NPE
         Integer orderStatus = order.getStatus();
-        if (orderStatus == null || orderStatus != 1) {
+        if (orderStatus == null || orderStatus != OrderStatusEnum.CONSUMING.getCode()) {
             throw new BusinessException("只有消费中的订单才能取消");
         }
 
-        // 更新状态为已取消
-        order.setStatus(3);
-        int updated = orderMapper.updateById(order);
+        // 更新状态为已取消（使用原子更新防止并发取消竞态）
+        int updated = orderMapper.atomicCancelOrder(orderId);
 
         if (updated > 0) {
             // 将包厢状态恢复为"空闲"
-            roomService.updateRoomStatus(order.getRoomId(), 0);
+            roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.AVAILABLE.getCode());
             
             // 清除Redis记录（含播放状态）
             // Bug7修复：同时清理播放状态 key，防止旧状态残留

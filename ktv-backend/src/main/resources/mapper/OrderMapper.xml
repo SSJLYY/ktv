@@ -73,4 +73,29 @@
         LIMIT 1
     </select>
 
+    <!-- C-1修复：原子结账更新，只有 status=1（消费中）的订单才能被结账 -->
+    <update id="atomicCloseOrder">
+        UPDATE t_order
+        SET end_time = #{endTime},
+            duration_minutes = #{durationMinutes},
+            room_amount = #{roomAmount},
+            total_amount = #{totalAmount},
+            status = 2,
+            closer_id = #{closerId},
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND status = 1
+          AND deleted = 0
+    </update>
+
+    <!-- C-1修复：原子取消订单更新，只有 status=1（消费中）的订单才能被取消 -->
+    <update id="atomicCancelOrder">
+        UPDATE t_order
+        SET status = 3,
+            update_time = NOW()
+        WHERE id = #{orderId}
+          AND status = 1
+          AND deleted = 0
+    </update>
+
 </mapper>

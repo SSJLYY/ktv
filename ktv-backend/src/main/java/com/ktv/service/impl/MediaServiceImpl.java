@@ -130,14 +130,13 @@ public class MediaServiceImpl implements MediaService {
         // 本地文件路径（可能是相对路径，如 /covers/1.jpg 或 covers/1.jpg）
         String absolutePath;
         if (coverUrl.startsWith("/") || WINDOWS_PATH_PATTERN.matcher(coverUrl).matches()) {
-            // 以/开头的相对路径（如 /covers/1.jpg）或绝对路径，都拼上 mediaBasePath（去掉开头的 /）
             if (coverUrl.startsWith("/")) {
-                absolutePath = mediaBasePath + coverUrl;
+                absolutePath = Paths.get(mediaBasePath, coverUrl.substring(1)).toString();
             } else {
                 absolutePath = coverUrl;
             }
         } else {
-            absolutePath = mediaBasePath + "/" + coverUrl;
+            absolutePath = Paths.get(mediaBasePath, coverUrl).toString();
         }
 
         // C3修复：使用Path.normalize()验证最终路径仍在mediaBasePath下
@@ -151,7 +150,7 @@ public class MediaServiceImpl implements MediaService {
         File coverFile = normalizedPath.toFile();
         if (!coverFile.exists()) {
             // 按 songId 扫描 covers 目录查找任意扩展名的封面
-            File coversDir = new File(mediaBasePath + "/covers");
+            File coversDir = Paths.get(mediaBasePath, "covers").toFile();
             if (coversDir.exists() && coversDir.isDirectory()) {
                 File[] candidates = coversDir.listFiles((dir, name) ->
                         name.startsWith(songId + "."));
@@ -201,12 +200,10 @@ public class MediaServiceImpl implements MediaService {
         }
 
         String finalPath;
-        // 如果是绝对路径，直接使用但需要验证
         if (filePath.startsWith("/") || WINDOWS_PATH_PATTERN.matcher(filePath).matches()) {
             finalPath = filePath;
         } else {
-            // 相对路径，拼接媒体基础路径
-            finalPath = mediaBasePath + "/" + filePath;
+            finalPath = Paths.get(mediaBasePath, filePath).toString();
         }
 
         // C4修复：验证最终路径是否在mediaBasePath范围内
@@ -232,7 +229,7 @@ public class MediaServiceImpl implements MediaService {
      */
     private Resource getDefaultCover() {
         // 返回默认封面图路径
-        String defaultCover = mediaBasePath + "/covers/default.jpg";
+        String defaultCover = Paths.get(mediaBasePath, "covers", "default.jpg").toString();
         File file = new File(defaultCover);
         if (file.exists()) {
             return new FileSystemResource(file);

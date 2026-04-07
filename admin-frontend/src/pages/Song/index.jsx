@@ -224,9 +224,9 @@ const Song = () => {
       message.error(`不支持的格式，请上传 ${ALL_MEDIA_TYPES.join('/')} 文件`)
       return Upload.LIST_IGNORE
     }
-    const sizeOk = file.size / 1024 / 1024 <= 500
+    const sizeOk = file.size / 1024 / 1024 <= 100
     if (!sizeOk) {
-      message.error('文件大小不能超过 500MB')
+      message.error('文件大小不能超过 100MB')
       return Upload.LIST_IGNORE
     }
 

@@ -11,6 +11,7 @@ import com.ktv.service.SongService;
 import com.ktv.util.MediaUtils;
 import com.ktv.vo.SongVO;
 import jakarta.validation.Valid;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 歌曲管理Controller
@@ -172,6 +174,12 @@ public class SongController {
             throw new BusinessException("上传文件不能为空");
         }
 
+        // O3修复：代码层校验文件大小（100MB），作为yml配置的额外防护
+        long maxSize = 100 * 1024 * 1024;
+        if (file.getSize() > maxSize) {
+            throw new BusinessException("文件大小不能超过100MB");
+        }
+
         // 获取文件扩展名
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null) {
@@ -189,8 +197,16 @@ public class SongController {
         }
 
         // 校验 MIME 类型，防止恶意文件伪装扩展名
+        // 使用模糊匹配：浏览器 MIME 类型不固定（如 .m4a 可能是 audio/mp4、audio/x-m4a、audio/m4a）
         String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_MEDIA_CONTENT_TYPES.contains(contentType)) {
+        if (contentType == null) {
+            throw new BusinessException("无法识别文件类型");
+        }
+        String normalizedContentType = contentType.toLowerCase();
+        boolean isAllowed = normalizedContentType.startsWith("audio/") ||
+                normalizedContentType.startsWith("video/") ||
+                normalizedContentType.startsWith("application/octet-stream");
+        if (!isAllowed) {
             throw new BusinessException("不支持的文件类型（MIME: " + contentType + "），仅支持音视频格式");
         }
 
@@ -280,6 +296,12 @@ public class SongController {
             throw new BusinessException("上传文件不能为空");
         }
 
+        // O3修复：代码层校验文件大小（10MB for images）
+        long maxImageSize = 10 * 1024 * 1024;
+        if (file.getSize() > maxImageSize) {
+            throw new BusinessException("图片文件大小不能超过10MB");
+        }
+
         // 获取文件扩展名
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null) {
@@ -297,14 +319,25 @@ public class SongController {
         }
 
         // 校验 MIME 类型，防止恶意文件伪装扩展名
+        // 使用模糊匹配：浏览器 MIME 类型不固定（如 .jpeg 可能是 image/jpeg、image/pjpeg）
         String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+        if (contentType == null) {
+            throw new BusinessException("无法识别文件类型");
+        }
+        String normalizedContentType = contentType.toLowerCase();
+        boolean isAllowedImage = normalizedContentType.startsWith("image/");
+        if (!isAllowedImage) {
             throw new BusinessException("不支持的图片类型（MIME: " + contentType + "），仅支持 jpg/png/gif/webp");
         }
 
         try {
             // 创建封面图目录
-            File coverDir = new File(mediaBasePath + "/covers");
+            Path coverDirPath = Paths.get(mediaBasePath, "covers").normalize();
+            Path basePath = Paths.get(mediaBasePath).normalize().toAbsolutePath();
+            if (!coverDirPath.toAbsolutePath().startsWith(basePath)) {
+                throw new BusinessException("非法的文件路径");
+            }
+            File coverDir = coverDirPath.toFile();
             if (!coverDir.exists()) {
                 coverDir.mkdirs();
             }

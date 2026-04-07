@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResourceRegion;
 
 import java.io.File;
 import java.io.IOException;
@@ -96,13 +97,13 @@ public class MediaStreamController {
 
             log.info("Range请求：songId={}, start={}, end={}, length={}", songId, start, end, contentLength);
 
-            // 返回206 Partial Content
+            // 返回206 Partial Content（使用ResourceRegion让Spring自动处理部分内容传输）
+            ResourceRegion region = new ResourceRegion(resource, start, contentLength);
             return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                     .contentType(MediaType.parseMediaType(mediaType))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                    .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + fileSize)
                     .contentLength(contentLength)
-                    .body(resource);
+                    .body(region);
 
         } catch (NumberFormatException e) {
             log.error("Range请求解析失败", e);

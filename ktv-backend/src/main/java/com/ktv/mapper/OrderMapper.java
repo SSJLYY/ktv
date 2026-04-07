@@ -51,4 +51,33 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @return 进行中的订单（无则返回null）
      */
     Order selectActiveOrderByRoomId(@Param("roomId") Long roomId);
+
+    /**
+     * C-1修复：原子结账更新，只有 status=1（消费中）的订单才能被结账
+     * 使用 WHERE status=1 条件防止并发结账竞态
+     *
+     * @param orderId 订单ID
+     * @param endTime 结账时间
+     * @param durationMinutes 消费时长（分钟）
+     * @param roomAmount 包厢费用
+     * @param totalAmount 总费用
+     * @param closerId 结账操作员ID
+     * @return 影响行数（1=成功，0=状态已变更）
+     */
+    int atomicCloseOrder(
+            @Param("orderId") Long orderId,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("durationMinutes") Integer durationMinutes,
+            @Param("roomAmount") java.math.BigDecimal roomAmount,
+            @Param("totalAmount") java.math.BigDecimal totalAmount,
+            @Param("closerId") Long closerId
+    );
+
+    /**
+     * C-1修复：原子取消订单更新，只有 status=1（消费中）的订单才能被取消
+     *
+     * @param orderId 订单ID
+     * @return 影响行数（1=成功，0=状态已变更）
+     */
+    int atomicCancelOrder(@Param("orderId") Long orderId);
 }

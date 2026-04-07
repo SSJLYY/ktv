@@ -177,7 +177,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         String queueKey = getQueueKey(orderId);
         stringRedisTemplate.opsForList().remove(queueKey, 1, orderSongId.toString());
 
-        // 3. 从数据库中删除该点歌记录（物理删除）
+        // 3. 逻辑删除点歌记录（MyBatis-Plus @TableLogic 自动处理）
         orderSongMapper.deleteById(orderSongId);
 
         log.info("取消点歌成功：点歌记录ID={}", orderSongId);

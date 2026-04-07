@@ -61,7 +61,7 @@ export default function Join() {
       const order = res.data
       if (order && order.status === 1) {
         setOrderId(order.id)
-        Toast.show({ content: `已加入包厢 ${order.roomName}`, icon: 'success' })
+      Toast.show({ content: `已加入包厢 ${order.roomName || '未知'}`, icon: 'success' })
         navigate('/search', { replace: true })
       } else {
         Toast.show({ content: '订单ID=1不在进行中，请手动输入订单号', icon: 'fail' })

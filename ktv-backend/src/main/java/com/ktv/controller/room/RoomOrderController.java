@@ -52,7 +52,7 @@ public class RoomOrderController {
         
         if (requestCount != null && requestCount > MAX_REQUESTS_PER_MINUTE) {
             log.warn("IP限流：{} 超过限制（{}/min）", clientIp, requestCount);
-            return Result.error(429, "请求过于频繁，请稍后再试");
+            return Result.fail(429, "请求过于频繁，请稍后再试");
         }
         
         log.info("包厢端查询订单：orderId={}, ip={}", orderId, clientIp);

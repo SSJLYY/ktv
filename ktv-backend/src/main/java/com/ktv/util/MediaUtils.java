@@ -1,5 +1,9 @@
 package com.ktv.util;
 
+import lombok.extern.slf4j.Slf4j;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -8,10 +12,12 @@ import java.util.stream.Stream;
 /**
  * 媒体文件工具类
  * S10修复：将散落在 SongController、MediaServiceImpl 等处的媒体类型判断逻辑统一提取
+ * C-3/C-4修复：添加路径安全检查方法，防止路径遍历攻击
  *
  * @author shaun.sheng
  * @since 2026-03-31
  */
+@Slf4j
 public final class MediaUtils {
 
     private MediaUtils() {

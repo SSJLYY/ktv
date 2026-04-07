@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Toast } from 'antd-mobile'
 import {
   PlayOutline,
-  SoundMuteOutline,
+  PauseOutline,
   RightOutline,
   AudioFill,
 } from 'antd-mobile-icons'
@@ -329,7 +329,7 @@ export default function PlayBar({ onVideoPlay }) {
               disabled={operating}
               title={isPlaying ? '暂停' : '继续'}
             >
-              {isPlaying ? <SoundMuteOutline fontSize={30} /> : <PlayOutline fontSize={30} />}
+              {isPlaying ? <PauseOutline fontSize={30} /> : <PlayOutline fontSize={30} />}
             </button>
             <button className="ctrl-btn" onClick={handleNext} disabled={operating} title="切歌">
               <RightOutline fontSize={26} />

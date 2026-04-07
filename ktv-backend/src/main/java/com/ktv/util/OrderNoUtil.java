@@ -1,6 +1,5 @@
 package com.ktv.util;
 
-import com.ktv.mapper.OrderMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OrderNoUtil {
 
-    private final OrderMapper orderMapper;
     private final StringRedisTemplate stringRedisTemplate;
 
     /**
