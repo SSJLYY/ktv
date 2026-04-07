@@ -1,15 +1,13 @@
 package com.ktv.controller.room;
 
+import com.ktv.common.annotation.RateLimit;
 import com.ktv.common.result.Result;
 import com.ktv.service.OrderService;
 import com.ktv.vo.OrderBasicVO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * 包厢端订单接口（无需认证）
@@ -26,10 +24,6 @@ import java.util.concurrent.TimeUnit;
 public class RoomOrderController {
 
     private final OrderService orderService;
-    private final StringRedisTemplate stringRedisTemplate;
-
-    private static final String RATE_LIMIT_KEY_PREFIX = "ktv:rate_limit:room_order:";
-    private static final int MAX_REQUESTS_PER_MINUTE = 10;
 
     /**
      * 根据订单ID查询订单基础信息（包厢端加入验证用）
@@ -40,21 +34,9 @@ public class RoomOrderController {
      * @return 订单基础信息（id, status, roomName）
      */
     @GetMapping("/{orderId}")
+    @RateLimit(maxRequests = 10, windowSeconds = 60, message = "请求过于频繁，请稍后再试")
     public Result<OrderBasicVO> getOrderInfo(@PathVariable Long orderId, HttpServletRequest request) {
-        // H21修复：基于IP的限流检查
         String clientIp = getClientIp(request);
-        String rateLimitKey = RATE_LIMIT_KEY_PREFIX + clientIp;
-        
-        Long requestCount = stringRedisTemplate.opsForValue().increment(rateLimitKey);
-        if (requestCount != null && requestCount == 1) {
-            stringRedisTemplate.expire(rateLimitKey, 1, TimeUnit.MINUTES);
-        }
-        
-        if (requestCount != null && requestCount > MAX_REQUESTS_PER_MINUTE) {
-            log.warn("IP限流：{} 超过限制（{}/min）", clientIp, requestCount);
-            return Result.fail(429, "请求过于频繁，请稍后再试");
-        }
-        
         log.info("包厢端查询订单：orderId={}, ip={}", orderId, clientIp);
         OrderBasicVO result = orderService.getOrderBasicInfo(orderId);
         return Result.success(result);

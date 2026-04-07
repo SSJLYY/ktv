@@ -23,13 +23,30 @@ export default function PlayBar({ onVideoPlay }) {
   const timerRef = useRef(null)
 
   // F-S3修复：使用 useCallback 缓存 fetchPlayStatus，避免定时器因 fetchPlayStatus 变化而不必要地销毁重建
-  // 获取播放状态
-  const fetchPlayStatus = useCallback(async () => {
+  // 获取播放状态（含自动重试机制）
+  const MAX_RETRY_COUNT = 3
+  const RETRY_DELAY_MS = 2000
+  const retryCountRef = useRef(0)
+  const retryTimerRef = useRef(null)
+
+  const fetchPlayStatus = useCallback(async (isRetry = false) => {
     if (!orderId) return
     try {
       const res = await getCurrentPlayStatus(orderId)
       setPlayInfo(res.data)
-    } catch { /* handled */ }
+      retryCountRef.current = 0 // 成功后重置重试计数
+    } catch (err) {
+      console.warn('获取播放状态失败', err)
+      // 非重试请求或重试次数未耗尽时，自动重试
+      if (!isRetry && retryCountRef.current < MAX_RETRY_COUNT) {
+        retryCountRef.current++
+        console.log(`将在 ${RETRY_DELAY_MS / 1000}s 后重试获取播放状态（第${retryCountRef.current}次）`)
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = setTimeout(() => {
+          fetchPlayStatus(true)
+        }, RETRY_DELAY_MS)
+      }
+    }
   }, [orderId])
 
   // F-S3修复：使用 ref 追踪 queueVersion，避免每次点歌后定时器不必要的销毁重建
@@ -52,6 +69,10 @@ export default function PlayBar({ onVideoPlay }) {
       if (timerRef.current) {
         clearInterval(timerRef.current)
         timerRef.current = null
+      }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
       }
     }
   }, [fetchPlayStatus])

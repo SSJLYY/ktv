@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.common.util.PinyinUtil;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.SongDTO;
 import com.ktv.entity.Singer;
 import com.ktv.entity.Song;
@@ -40,9 +41,6 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
-    // N4修复：Redis Key 统一使用 ktv: 前缀
-    private static final String SONG_CACHE_PREFIX = "ktv:song:cache:";
-    private static final String SINGER_SONG_COUNT_PREFIX = "ktv:singer:songCount:";
     /**
      * 歌曲缓存TTL（1小时）
      */
@@ -152,6 +150,13 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
 
         // H5修复：如果修改了歌手，使用Objects.equals防止NPE
         if (!java.util.Objects.equals(existSong.getSingerId(), song.getSingerId())) {
+            Singer oldSinger = singerService.getById(existSong.getSingerId());
+            String oldSingerName = oldSinger != null ? oldSinger.getName() : existSong.getSingerId().toString();
+            String newSingerName = newSinger.getName();
+            log.info("歌曲[{}]歌手变更：{} → {}（songId={}, 旧singerId={}, 新singerId={}）",
+                    song.getName(), oldSingerName, newSingerName,
+                    id, existSong.getSingerId(), song.getSingerId());
+
             singerService.update().eq("id", existSong.getSingerId())
                     .setSql("song_count = GREATEST(song_count - 1, 0)").update();
             singerService.update().eq("id", song.getSingerId())
@@ -185,7 +190,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
 
         // 清除Redis缓存
         if (success) {
-            String cacheKey = SONG_CACHE_PREFIX + id;
+            String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
             stringRedisTemplate.delete(cacheKey);
         }
 
@@ -195,7 +200,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     @Override
     public SongVO getSongById(Long id) {
         // 先从Redis缓存获取（使用StringRedisTemplate + JSON序列化，避免Jackson反序列化ClassCastException）
-        String cacheKey = SONG_CACHE_PREFIX + id;
+        String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
         String cached = stringRedisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             try {
@@ -229,7 +234,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
      */
     @Override
     public void refreshSongCache(Long id) {
-        String cacheKey = SONG_CACHE_PREFIX + id;
+        String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
         // 先清除旧缓存
         stringRedisTemplate.delete(cacheKey);
         // 重新从数据库加载并写入缓存

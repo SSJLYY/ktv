@@ -2,6 +2,7 @@ package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ktv.common.enums.OrderSongStatusEnum;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.CurrentPlayVO;
 import com.ktv.entity.OrderSong;
 import com.ktv.common.exception.BusinessException;
@@ -29,13 +30,6 @@ public class PlayControlServiceImpl implements PlayControlService {
     private final StringRedisTemplate redisTemplate;
 
     /**
-     * Redis Key常量
-     */
-    private static final String PLAYING_KEY_PREFIX = "ktv:playing:";
-    private static final String PLAY_STATUS_KEY_PREFIX = "ktv:play:status:";
-    private static final String QUEUE_KEY_PREFIX = "ktv:queue:";
-
-    /**
      * 播放状态常量
      */
     private static final String PLAYING = "PLAYING";
@@ -48,10 +42,10 @@ public class PlayControlServiceImpl implements PlayControlService {
         log.info("切歌，orderId={}", orderId);
 
         // 1. 获取当前播放的点歌记录ID（S5修复：实际存的是 orderSongId 而非 songId）
-        String playingKey = PLAYING_KEY_PREFIX + orderId;
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
         Long currentOrderSongId = null;
-        
+
         // H10修复：增加try-catch处理NumberFormatException
         if (currentOrderSongIdStr != null) {
             try {
@@ -73,14 +67,14 @@ public class PlayControlServiceImpl implements PlayControlService {
         }
 
         // 3. 从Redis队列中取下一首
-        String queueKey = QUEUE_KEY_PREFIX + orderId;
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
         String nextSongIdStr = redisTemplate.opsForList().leftPop(queueKey);
 
         if (nextSongIdStr == null) {
             // 队列为空，清除当前播放歌曲和播放状态
             // Bug11修复：同时清除 play:status key，否则 playStatus=PLAYING 但 songId=null，状态不一致
             redisTemplate.delete(playingKey);
-            String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+            String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
             redisTemplate.opsForValue().set(statusKey, NONE, 24, TimeUnit.HOURS);
             log.info("队列为空，已清除播放状态，orderId={}", orderId);
             return;
@@ -110,7 +104,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         redisTemplate.opsForValue().set(playingKey, nextSongIdStr, 24, TimeUnit.HOURS);
 
         // 6. 恢复播放状态
-        String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
         redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
 
         log.info("切歌成功，下一首：orderSongId={}, songName={}", nextSongId, nextSong.getSongName());
@@ -121,7 +115,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         log.info("重唱，orderId={}", orderId);
 
         // 1. 获取当前播放的点歌记录ID（S5修复：实际存的是 orderSongId 而非 songId）
-        String playingKey = PLAYING_KEY_PREFIX + orderId;
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
 
         if (currentOrderSongIdStr == null) {
@@ -149,7 +143,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         orderSongMapper.updateById(currentSong);
 
         // 4. 恢复播放状态
-        String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
         redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
 
         log.info("重唱成功，orderSongId={}, songName={}", currentOrderSongId, currentSong.getSongName());
@@ -160,7 +154,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         log.info("暂停播放，orderId={}", orderId);
 
         // 更新Redis播放状态为"已暂停"
-        String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
         redisTemplate.opsForValue().set(statusKey, PAUSED, 24, TimeUnit.HOURS);
 
         log.info("暂停播放成功，orderId={}", orderId);
@@ -171,7 +165,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         log.info("恢复播放，orderId={}", orderId);
 
         // 检查是否有播放歌曲
-        String playingKey = PLAYING_KEY_PREFIX + orderId;
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
 
         if (currentOrderSongIdStr == null) {
@@ -179,7 +173,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         }
 
         // 更新Redis播放状态为"播放中"
-        String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
         redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
 
         log.info("恢复播放成功，orderId={}", orderId);
@@ -192,12 +186,12 @@ public class PlayControlServiceImpl implements PlayControlService {
         CurrentPlayVO vo = new CurrentPlayVO();
 
         // 1. 获取播放状态（StringRedisTemplate直接返回String）
-        String statusKey = PLAY_STATUS_KEY_PREFIX + orderId;
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
         String playStatus = redisTemplate.opsForValue().get(statusKey);
         vo.setPlayStatus(playStatus != null ? playStatus : NONE);
 
         // 2. 获取当前播放歌曲（S5修复：存的是 orderSongId 而非 songId）
-        String playingKey = PLAYING_KEY_PREFIX + orderId;
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
 
         if (currentOrderSongIdStr != null) {
@@ -210,7 +204,7 @@ public class PlayControlServiceImpl implements PlayControlService {
                 redisTemplate.delete(playingKey); // 清除脏数据
                 currentOrderSongId = null;
             }
-            
+
             if (currentOrderSongId != null) {
                 // 关联查询歌曲信息
                 OrderSong orderSong = orderSongMapper.findSongInfoById(currentOrderSongId);
@@ -227,7 +221,7 @@ public class PlayControlServiceImpl implements PlayControlService {
         }
 
         // 3. 获取队列剩余数量
-        String queueKey = QUEUE_KEY_PREFIX + orderId;
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
         Long queueSize = redisTemplate.opsForList().size(queueKey);
         vo.setQueueRemaining(queueSize != null ? queueSize.intValue() : 0);
 

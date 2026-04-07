@@ -1,5 +1,6 @@
 package com.ktv.util;
 
+import com.ktv.constant.RedisKeyConstants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -29,11 +30,6 @@ public class OrderNoUtil {
      * 日期格式化
      */
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
-    
-    /**
-     * Redis key前缀
-     */
-    private static final String REDIS_KEY_PREFIX = "ktv:order:no:";
 
     /**
      * 生成下一个订单编号
@@ -44,9 +40,9 @@ public class OrderNoUtil {
     public String generateOrderNo() {
         String dateStr = LocalDate.now().format(DATE_FORMATTER);
         String prefix = "KTV" + dateStr;
-        
+
         // C5修复：使用Redis INCR获取分布式唯一序号
-        String redisKey = REDIS_KEY_PREFIX + dateStr;
+        String redisKey = RedisKeyConstants.buildOrderNoKey(dateStr);
         Long seq = stringRedisTemplate.opsForValue().increment(redisKey);
         
         // 设置过期时间为2天，避免Redis内存泄漏

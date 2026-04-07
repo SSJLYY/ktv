@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ktv.common.enums.RoomStatusEnum;
 import com.ktv.common.enums.OrderStatusEnum;
 import com.ktv.common.exception.BusinessException;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.OrderOpenDTO;
 import com.ktv.entity.Order;
 import com.ktv.entity.Room;
@@ -60,29 +61,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
      * 按包厢维度加锁，key: "lock:open_order:room:{roomId}"
      */
     private final RedisLockRegistry redisLockRegistry;
-
-    /**
-     * Redis Key前缀：点歌队列（与 PlayQueueServiceImpl 保持一致：ktv:queue:{orderId}）
-     * BugD修复：原来错误地使用了 "ktv:queue:room:{roomId}"，
-     * 实际点歌队列 Key 是 "ktv:queue:{orderId}"，两者不一致导致开台时无法清空队列
-     */
-    private static final String REDIS_QUEUE_KEY_PREFIX = "ktv:queue:";
-
-    /**
-     * Redis Key：当前订单（包厢维度）
-     */
-    private static final String REDIS_CURRENT_ORDER_KEY = "ktv:current_order:room:";
-
-    /**
-     * Redis Key：当前播放歌曲（与 PlayControlServiceImpl 保持一致：ktv:playing:{orderId}）
-     * Bug7修复：结账/取消时需要清理这些 key
-     */
-    private static final String REDIS_PLAYING_KEY_PREFIX = "ktv:playing:";
-
-    /**
-     * Redis Key：播放状态（与 PlayControlServiceImpl 保持一致：ktv:play:status:{orderId}）
-     */
-    private static final String REDIS_PLAY_STATUS_KEY_PREFIX = "ktv:play:status:";
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -153,7 +131,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // 8. 记录当前订单到Redis（方便包厢点歌端查询）
         // Bug6修复：StringRedisTemplate 只能存 String，orderId 需转为字符串
-        redisTemplate.opsForValue().set(REDIS_CURRENT_ORDER_KEY + openDTO.getRoomId(), order.getId().toString(), 24, TimeUnit.HOURS);
+        redisTemplate.opsForValue().set(RedisKeyConstants.buildCurrentOrderRoomKey(openDTO.getRoomId()), order.getId().toString(), 24, TimeUnit.HOURS);
 
         log.info("开台成功：订单号={}, 包厢ID={}, 操作员ID={}", orderNo, openDTO.getRoomId(), operatorId);
 
@@ -207,7 +185,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // 9. 清理点歌队列
         try {
-            String queueKey = "ktv:queue:" + orderId;
+            String queueKey = RedisKeyConstants.buildQueueKey(orderId);
             Long queueSize = redisTemplate.opsForList().size(queueKey);
             if (queueSize != null && queueSize > 0) {
                 redisTemplate.delete(queueKey);
@@ -218,7 +196,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         // 10. 清除Redis中的当前订单记录 + 播放相关状态
-        redisTemplate.delete(REDIS_CURRENT_ORDER_KEY + order.getRoomId());
+        redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
         clearPlaybackKeys(orderId);
 
         // 11. 重新查询订单获取最新数据（原子更新后 order 对象已过时）
@@ -278,7 +256,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             
             // 清除Redis记录（含播放状态）
             // Bug7修复：同时清理播放状态 key，防止旧状态残留
-            redisTemplate.delete(REDIS_CURRENT_ORDER_KEY + order.getRoomId());
+            redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
             clearPlaybackKeys(orderId);
             
             log.info("订单已取消：订单号={}", order.getOrderNo());
@@ -328,9 +306,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
      */
     private void clearPlaybackKeys(Long orderId) {
         try {
-            redisTemplate.delete(REDIS_PLAYING_KEY_PREFIX + orderId);
-            redisTemplate.delete(REDIS_PLAY_STATUS_KEY_PREFIX + orderId);
-            redisTemplate.delete(REDIS_QUEUE_KEY_PREFIX + orderId);
+            redisTemplate.delete(RedisKeyConstants.buildPlayingKey(orderId));
+            redisTemplate.delete(RedisKeyConstants.buildPlayStatusKey(orderId));
+            redisTemplate.delete(RedisKeyConstants.buildQueueKey(orderId));
             log.debug("已清理订单{}的播放状态Redis key", orderId);
         } catch (Exception e) {
             log.warn("清理播放状态Redis key失败: {}", e.getMessage());

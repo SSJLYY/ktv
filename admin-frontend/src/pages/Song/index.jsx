@@ -699,7 +699,7 @@ const Song = () => {
             <SoundOutlined style={{ marginRight: 6, color: '#1677ff' }} />
             音视频文件
             <span style={{ color: '#999', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
-              支持 MP3 / FLAC / WAV / OGG / M4A / MP4（最大 500MB）
+              支持 MP3 / FLAC / WAV / OGG / M4A / MP4（最大 100MB）
             </span>
           </div>
           <Upload.Dragger

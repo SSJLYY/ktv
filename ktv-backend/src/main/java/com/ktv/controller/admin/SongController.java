@@ -7,6 +7,7 @@ import com.ktv.common.result.Result;
 import com.ktv.dto.SongDTO;
 import com.ktv.entity.Song;
 import com.ktv.mapper.SongMapper;
+import com.ktv.security.FileSecurityChecker;
 import com.ktv.service.SongService;
 import com.ktv.util.MediaUtils;
 import com.ktv.vo.SongVO;
@@ -45,6 +46,7 @@ public class SongController {
 
     private final SongService songService;
     private final SongMapper songMapper;
+    private final FileSecurityChecker fileSecurityChecker;
 
     /**
      * 媒体文件基础路径
@@ -245,6 +247,15 @@ public class SongController {
             // 保存文件
             file.transferTo(targetFile);
 
+            // 文件安全检测（魔数验证 + 病毒扫描预留）
+            FileSecurityChecker.SecurityCheckResult securityResult =
+                    fileSecurityChecker.check(targetFilePath, originalFilename, contentType);
+            if (!securityResult.passed()) {
+                // 安全检测未通过，删除已保存的文件
+                Files.deleteIfExists(targetFilePath);
+                throw new BusinessException("文件安全检测未通过：" + securityResult.message());
+            }
+
             // 更新数据库中的文件路径（相对路径）
             String relativePath = singerId + "/" + newFileName;
             song.setFilePath(relativePath);
@@ -348,6 +359,16 @@ public class SongController {
 
             // 保存文件
             file.transferTo(targetFile);
+
+            // 文件安全检测（魔数验证）
+            Path coverFilePath = targetFile.toPath();
+            FileSecurityChecker.SecurityCheckResult coverSecurityResult =
+                    fileSecurityChecker.check(coverFilePath, originalFilename, contentType);
+            if (!coverSecurityResult.passed()) {
+                // 安全检测未通过，删除已保存的文件
+                Files.deleteIfExists(coverFilePath);
+                throw new BusinessException("文件安全检测未通过：" + coverSecurityResult.message());
+            }
 
             // 更新数据库中的封面图路径
             String relativePath = "/covers/" + newFileName;

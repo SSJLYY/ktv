@@ -7,11 +7,20 @@ spring:
 
   # 数据源配置
   # M5/M6/M14修复：使用环境变量注入敏感配置，避免硬编码
+  # HikariCP 连接池优化配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/ktv_db?useUnicode=true&characterEncoding=utf8&useSSL=${DB_USE_SSL:false}&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY:true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:Qq123456}
+    hikari:
+      minimum-idle: 5              # 最小空闲连接数
+      maximum-pool-size: 20        # 最大连接数（KTV系统并发量不大，20足够）
+      idle-timeout: 300000         # 空闲连接超时（5分钟）
+      max-lifetime: 1800000        # 连接最大生命周期（30分钟，防止MySQL 8小时断开）
+      connection-timeout: 5000     # 获取连接超时（5秒）
+      connection-test-query: SELECT 1  # 连接有效性检测
+      leak-detection-threshold: 60000 # 连接泄漏检测阈值（60秒），便于排查未关闭的连接
 
   # Redis配置
   # M7/M9修复：Redis密码使用环境变量，连接池max-wait设置合理超时
@@ -27,7 +36,12 @@ spring:
           max-active: 8
           max-wait: 3000ms  # M9修复：从-1ms改为3000ms，避免无限等待导致线程饥饿
           max-idle: 8
-          min-idle: 0
+          min-idle: 2        # 最小空闲连接数（从0改为2，减少冷启动延迟）
+        shutdown-timeout: 200ms  # 优雅关闭超时
+        cluster:
+          refresh:
+            adaptive: true       # 自适应刷新拓扑
+            period: 30s           # 定期刷新拓扑周期
 
   # 文件上传配置（深度审查修复：500MB→100MB，降低DoS风险）
   servlet:
@@ -39,6 +53,12 @@ spring:
 # M8修复：支持Windows和Linux路径，通过环境变量配置
 media:
   base-path: ${MEDIA_BASE_PATH:/data/ktv-media}
+
+# 文件安全检测配置
+# 开发环境可设为 false 关闭魔数检测，生产环境建议 true
+ktv:
+  security:
+    magic-check-enabled: ${MAGIC_CHECK_ENABLED:true}
 
 # 跨域配置（S9修复：支持通过环境变量动态配置，生产环境通过 CORS_ALLOWED_ORIGINS 设置）
 cors:
@@ -65,10 +85,13 @@ mybatis-plus:
 
 # 日志配置
 # L4修复：增加日志文件输出配置，避免容器重启后日志丢失
+# 支持通过环境变量动态调整日志级别：LOG_LEVEL_APP、LOG_LEVEL_WEB
 logging:
   level:
-    com.ktv: debug
-    org.springframework.web: info
+    com.ktv: ${LOG_LEVEL_APP:debug}
+    org.springframework.web: ${LOG_LEVEL_WEB:info}
+    org.springframework.data: ${LOG_LEVEL_DATA:warn}
+    org.mybatis: ${LOG_LEVEL_MYBATIS:warn}
   file:
     name: logs/ktv-backend.log
   logback:
@@ -76,3 +99,34 @@ logging:
       max-file-size: 100MB
       max-history: 30
       total-size-cap: 3GB
+
+---
+# 生产环境配置（激活方式：java -jar ktv-backend.jar --spring.profiles.active=prod）
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+logging:
+  level:
+    com.ktv: info
+    org.springframework.web: warn
+    org.springframework.data: warn
+    org.mybatis: warn
+
+# 国际化配置
+spring:
+  messages:
+    basename: i18n/messages
+    encoding: UTF-8
+    fallback-to-system-locale: true
+
+# SpringDoc OpenAPI / Swagger 配置
+# 访问地址：http://localhost:8080/swagger-ui.html
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method

@@ -2,6 +2,7 @@ package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.entity.Song;
 import com.ktv.mapper.SongMapper;
 import com.ktv.service.HotSongService;
@@ -36,11 +37,6 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
     private final StringRedisTemplate stringRedisTemplate;
 
     /**
-     * Redis热门歌曲ZSet Key
-     */
-    private static final String HOT_SONG_KEY = "ktv:song:hot";
-
-    /**
      * 预热时读取的歌曲数量
      */
     private static final int WARM_UP_SIZE = 50;
@@ -55,7 +51,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         }
 
         // 检查Redis中是否有数据
-        Long size = stringRedisTemplate.opsForZSet().size(HOT_SONG_KEY);
+        Long size = stringRedisTemplate.opsForZSet().size(RedisKeyConstants.SONG_HOT);
         if (size == null || size == 0) {
             log.info("Redis热门榜为空，执行预热");
             warmUpHotSongs();
@@ -63,7 +59,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
 
         // 从Redis ZSet获取热门歌曲ID（按分数降序）
         Set<ZSetOperations.TypedTuple<String>> hotSongs = stringRedisTemplate.opsForZSet()
-                .reverseRangeWithScores(HOT_SONG_KEY, 0, limit - 1);
+                .reverseRangeWithScores(RedisKeyConstants.SONG_HOT, 0, limit - 1);
 
         if (hotSongs == null || hotSongs.isEmpty()) {
             log.info("Redis热门榜为空，从数据库直接查询");
@@ -112,7 +108,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         if (songId == null) {
             return;
         }
-        stringRedisTemplate.opsForZSet().incrementScore(HOT_SONG_KEY, songId.toString(), 1);
+        stringRedisTemplate.opsForZSet().incrementScore(RedisKeyConstants.SONG_HOT, songId.toString(), 1);
         log.info("歌曲热度+1：songId={}", songId);
     }
 
@@ -136,7 +132,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         }
 
         // 清空现有热门榜
-        stringRedisTemplate.delete(HOT_SONG_KEY);
+        stringRedisTemplate.delete(RedisKeyConstants.SONG_HOT);
 
         // M2修复：批量写入Redis ZSet，使用ZSetOperations.add(Set)减少网络往返
         Set<ZSetOperations.TypedTuple<String>> tuples = songs.stream()
@@ -144,7 +140,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
                         song.getId().toString(),
                         song.getPlayCount().doubleValue()))
                 .collect(Collectors.toSet());
-        stringRedisTemplate.opsForZSet().add(HOT_SONG_KEY, tuples);
+        stringRedisTemplate.opsForZSet().add(RedisKeyConstants.SONG_HOT, tuples);
 
         log.info("热门榜预热完成，共{}首歌曲", songs.size());
     }
@@ -158,7 +154,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         log.info("开始同步热门分数到数据库...");
 
         Set<ZSetOperations.TypedTuple<String>> hotSongs = stringRedisTemplate.opsForZSet()
-                .rangeWithScores(HOT_SONG_KEY, 0, -1);
+                .rangeWithScores(RedisKeyConstants.SONG_HOT, 0, -1);
 
         if (hotSongs == null || hotSongs.isEmpty()) {
             log.info("Redis热门榜为空，无需同步");

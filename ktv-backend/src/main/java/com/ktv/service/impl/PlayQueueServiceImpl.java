@@ -2,6 +2,7 @@ package com.ktv.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.entity.OrderSong;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.mapper.OrderSongMapper;
@@ -42,15 +43,6 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     private final PlayControlService playControlService;
 
     /**
-     * Redis队列Key前缀
-     */
-    private static final String QUEUE_KEY_PREFIX = "ktv:queue:";
-    /**
-     * Redis当前播放Key前缀（与 PlayControlServiceImpl 保持一致）
-     * Bug12修复：点歌时检查是否有歌在播放
-     */
-    private static final String PLAYING_KEY_PREFIX = "ktv:playing:";
-    /**
      * Redis队列过期时间（24小时）
      */
     private static final long QUEUE_EXPIRE_HOURS = 24;
@@ -70,7 +62,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         }
 
         // 2. 查询当前排队队列数量
-        String queueKey = getQueueKey(orderId);
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
         Long queueSize = stringRedisTemplate.opsForList().size(queueKey);
         int sortOrder = queueSize != null ? queueSize.intValue() + 1 : 1;
 
@@ -105,7 +97,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
                 @Override
                 public void afterCommit() {
                     try {
-                        String playingKey = PLAYING_KEY_PREFIX + orderId;
+                        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
                         String currentPlaying = stringRedisTemplate.opsForValue().get(playingKey);
                         if (currentPlaying == null && playControlService != null) {
                             log.info("当前无播放歌曲，自动触发播放第一首：orderId={}", orderId);
@@ -207,10 +199,4 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         return orderSongMapper.selectPlayedByOrderId(page, orderId);
     }
 
-    /**
-     * 获取Redis队列Key
-     */
-    private String getQueueKey(Long orderId) {
-        return QUEUE_KEY_PREFIX + orderId;
-    }
 }

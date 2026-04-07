@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktv.common.enums.RoomStatusEnum;
 import com.ktv.common.exception.BusinessException;
+import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.RoomDTO;
 import com.ktv.entity.Room;
 import com.ktv.mapper.RoomMapper;
@@ -37,11 +38,6 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     private final RoomMapper roomMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
-
-    /**
-     * Redis Key前缀：包厢状态快照
-     */
-    private static final String REDIS_ROOM_STATUS_KEY = "ktv:room:status";
 
     @Override
     public List<RoomVO> getRoomList(Integer status, String type) {
@@ -163,7 +159,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         // 从Redis中移除
         if (deleted) {
             try {
-                stringRedisTemplate.opsForHash().delete(REDIS_ROOM_STATUS_KEY, id.toString());
+                stringRedisTemplate.opsForHash().delete(RedisKeyConstants.ROOM_STATUS, id.toString());
             } catch (Exception e) {
                 log.warn("从Redis中删除包厢状态失败: {}", e.getMessage());
             }
@@ -220,7 +216,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
             // 使用StringRedisTemplate + JSON序列化，避免Jackson反序列化ClassCastException
             String json = objectMapper.writeValueAsString(roomStatus);
-            stringRedisTemplate.opsForHash().put(REDIS_ROOM_STATUS_KEY, room.getId().toString(), json);
+            stringRedisTemplate.opsForHash().put(RedisKeyConstants.ROOM_STATUS, room.getId().toString(), json);
             log.debug("包厢状态已同步到Redis: id={}, status={}", room.getId(), room.getStatus());
         } catch (JsonProcessingException e) {
             log.warn("同步包厢状态到Redis失败（序列化错误）: {}", e.getMessage());
