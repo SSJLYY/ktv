@@ -1,4 +1,4 @@
-﻿package com.ktv.vo;
+package com.ktv.vo;
 
 import lombok.Data;
 

@@ -135,7 +135,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         }
 
         // 2. 从Redis队列中移除该歌曲ID
-        String queueKey = getQueueKey(orderId);
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
         stringRedisTemplate.opsForList().remove(queueKey, 1, orderSongId.toString());
 
         // 3. 将该歌曲ID插入到队列头部
@@ -166,7 +166,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         }
 
         // 2. 从Redis队列中移除该歌曲ID
-        String queueKey = getQueueKey(orderId);
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
         stringRedisTemplate.opsForList().remove(queueKey, 1, orderSongId.toString());
 
         // 3. 逻辑删除点歌记录（MyBatis-Plus @TableLogic 自动处理）

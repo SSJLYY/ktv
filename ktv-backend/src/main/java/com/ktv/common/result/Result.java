@@ -1,4 +1,4 @@
-﻿package com.ktv.common.result;
+package com.ktv.common.result;
 
 import lombok.Data;
 

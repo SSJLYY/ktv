@@ -1,4 +1,4 @@
-﻿package com.ktv.controller.room;
+package com.ktv.controller.room;
 
 import com.ktv.common.result.Result;
 import com.ktv.service.HotSongService;

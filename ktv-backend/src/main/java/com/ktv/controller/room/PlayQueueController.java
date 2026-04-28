@@ -1,5 +1,6 @@
-﻿package com.ktv.controller.room;
+package com.ktv.controller.room;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ktv.entity.OrderSong;
 import com.ktv.service.PlayQueueService;
@@ -81,7 +82,7 @@ public class PlayQueueController {
      * @return 排队列表
      */
     @GetMapping
-    public Result<Page<OrderSong>> getQueueList(
+    public Result<IPage<OrderSong>> getQueueList(
             @PathVariable Long orderId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size
@@ -89,7 +90,7 @@ public class PlayQueueController {
         log.info("查询排队列表：订单ID={}, 页码={}, 每页数量={}", orderId, current, size);
 
         Page<OrderSong> pageParam = new Page<>(current, size);
-        Page<OrderSong> voPage = playQueueService.getQueueList(pageParam, orderId);
+        IPage<OrderSong> voPage = playQueueService.getQueueList(pageParam, orderId);
 
         return Result.success(voPage);
     }
@@ -104,7 +105,7 @@ public class PlayQueueController {
      * @return 已唱列表
      */
     @GetMapping("/played")
-    public Result<Page<OrderSong>> getPlayedList(
+    public Result<IPage<OrderSong>> getPlayedList(
             @PathVariable Long orderId,
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size
@@ -112,7 +113,7 @@ public class PlayQueueController {
         log.info("查询已唱列表：订单ID={}, 页码={}, 每页数量={}", orderId, current, size);
 
         Page<OrderSong> pageParam = new Page<>(current, size);
-        Page<OrderSong> voPage = playQueueService.getPlayedList(pageParam, orderId);
+        IPage<OrderSong> voPage = playQueueService.getPlayedList(pageParam, orderId);
 
         return Result.success(voPage);
     }

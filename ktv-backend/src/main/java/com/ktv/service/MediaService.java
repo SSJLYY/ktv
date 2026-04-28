@@ -1,4 +1,4 @@
-﻿package com.ktv.service;
+package com.ktv.service;
 
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;

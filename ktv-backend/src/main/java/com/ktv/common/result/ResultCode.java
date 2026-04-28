@@ -1,4 +1,4 @@
-﻿package com.ktv.common.result;
+package com.ktv.common.result;
 
 /**
  * 统一返回状态码枚举

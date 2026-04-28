@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
@@ -21,7 +21,6 @@ import {
   cancelOrder,
 } from '../../api/order'
 import { getAvailableRooms } from '../../api/room'
-import dayjs from 'dayjs'
 
 const { RangePicker } = DatePicker
 
@@ -67,21 +66,21 @@ const Order = () => {
   }
 
   // 加载空闲包厢列表
-  const loadAvailableRooms = async () => {
+  const loadAvailableRooms = useCallback(async () => {
     try {
       const res = await getAvailableRooms()
       setAvailableRooms(res.data || [])
     } catch (error) {
       console.error('加载空闲包厢失败:', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadAvailableRooms()
-  }, [])
+  }, [loadAvailableRooms])
 
   // 加载订单列表
-  const loadOrderList = async () => {
+  const loadOrderList = useCallback(async () => {
     try {
       setLoading(true)
       const res = await getOrderList(queryParams)
@@ -92,11 +91,11 @@ const Order = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [queryParams])
 
   useEffect(() => {
     loadOrderList()
-  }, [queryParams])
+  }, [loadOrderList])
 
   // 搜索
   const handleSearch = () => {

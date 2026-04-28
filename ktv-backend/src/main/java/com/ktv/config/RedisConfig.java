@@ -111,7 +111,7 @@ public class RedisConfig {
      */
     @Bean
     public RedisLockRegistry redisLockRegistry(RedisConnectionFactory connectionFactory) {
-        return new RedisLockRegistry(connectionFactory, "ktv:lock:", Duration.ofSeconds(30));
+        return new RedisLockRegistry(connectionFactory, "ktv:lock:", Duration.ofSeconds(30).toMillis());
     }
 
     /**

@@ -9,7 +9,9 @@ import request from './request'
 // 返回值是 List<RoomVO>，不是 IPage；前端不应传分页参数，也不应用 res.data.records 读取
 // 过滤掉空字符串参数（前端用 '' 表示"全部"，后端不应接收这些空值）
 export const getRoomList = (params) => {
-  const { pageNum, pageSize, ...rest } = params || {}
+  const rest = { ...(params || {}) }
+  delete rest.pageNum
+  delete rest.pageSize
   // pageNum/pageSize 丢弃（后端不支持分页）
   const cleanRest = Object.fromEntries(
     Object.entries(rest).filter(([, v]) => v !== '' && v !== null && v !== undefined)

@@ -1,4 +1,4 @@
-﻿package com.ktv.controller.admin;
+package com.ktv.controller.admin;
 
 import com.ktv.common.annotation.RateLimit;
 import com.ktv.common.result.Result;

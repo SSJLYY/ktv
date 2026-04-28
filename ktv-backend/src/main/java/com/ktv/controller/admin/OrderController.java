@@ -1,4 +1,4 @@
-﻿package com.ktv.controller.admin;
+package com.ktv.controller.admin;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;

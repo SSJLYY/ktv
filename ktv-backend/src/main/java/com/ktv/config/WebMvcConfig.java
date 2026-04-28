@@ -1,4 +1,4 @@
-﻿package com.ktv.config;
+package com.ktv.config;
 
 import com.ktv.interceptor.JwtInterceptor;
 import lombok.RequiredArgsConstructor;

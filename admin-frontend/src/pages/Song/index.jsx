@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
@@ -110,7 +110,7 @@ const Song = () => {
   ]
 
   // 加载歌手和分类列表
-  const loadOptions = async () => {
+  const loadOptions = useCallback(async () => {
     try {
       const singerRes = await getSingerList({ pageNum: 1, pageSize: 1000 })
       setSingers(singerRes.data.records || [])
@@ -119,13 +119,13 @@ const Song = () => {
     } catch (error) {
       console.error('加载选项失败:', error)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadOptions()
-  }, [])
+  }, [loadOptions])
 
-  const loadSongList = async () => {
+  const loadSongList = useCallback(async () => {
     try {
       setLoading(true)
       const res = await getSongList(queryParams)
@@ -136,11 +136,11 @@ const Song = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [queryParams])
 
   useEffect(() => {
     loadSongList()
-  }, [queryParams])
+  }, [loadSongList])
 
   const handleSearch = () => {
     setQueryParams({ ...queryParams, pageNum: 1 })
@@ -304,7 +304,7 @@ const Song = () => {
     if (coverFileList.length) {
       try {
         const file = coverFileList[0]
-        const res = await uploadCoverImage(uploadingSong.id, file, (e) => {
+        await uploadCoverImage(uploadingSong.id, file, (e) => {
           if (e.total) setCoverProgress(Math.round((e.loaded / e.total) * 100))
         })
         message.success('封面图上传成功')

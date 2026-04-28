@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
@@ -54,7 +54,7 @@ const Singer = () => {
   ]
 
   // 加载歌手列表
-  const loadSingerList = async () => {
+  const loadSingerList = useCallback(async () => {
     try {
       setLoading(true)
       const res = await getSingerList(queryParams)
@@ -66,11 +66,11 @@ const Singer = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [queryParams])
 
   useEffect(() => {
     loadSingerList()
-  }, [queryParams])
+  }, [loadSingerList])
 
   // 搜索
   const handleSearch = () => {

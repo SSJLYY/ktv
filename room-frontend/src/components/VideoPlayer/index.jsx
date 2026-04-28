@@ -37,17 +37,23 @@ export default function VideoPlayer({ playInfo, onClose }) {
   isMutedRef.current = isMuted
   // 记录当前播放的歌曲ID，用于检测切歌
   const currentSongIdRef = useRef(playInfo?.songId)
+  const playInfoRef = useRef(playInfo)
+  const onCloseRef = useRef(onClose)
+  playInfoRef.current = playInfo
+  onCloseRef.current = onClose
 
   // 监听歌曲变化，如果切歌了就关闭视频播放器
   useEffect(() => {
-    if (playInfo?.songId && currentSongIdRef.current && currentSongIdRef.current !== playInfo.songId) {
+    const currentPlayInfo = playInfoRef.current
+
+    if (currentPlayInfo?.songId && currentSongIdRef.current && currentSongIdRef.current !== currentPlayInfo.songId) {
       // 歌曲已切换，关闭视频
-      if (onClose) onClose()
+      onCloseRef.current?.()
       return
     }
-    currentSongIdRef.current = playInfo?.songId
+    currentSongIdRef.current = currentPlayInfo?.songId
 
-    if (playInfo) {
+    if (currentPlayInfo) {
       setPlaying(true)
       // 3秒后隐藏控制栏
       resetControlsTimer()

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Toast } from 'antd-mobile'
 import {
   PlayOutline,
-  PauseOutline,
+  StopOutline,
   RightOutline,
   AudioFill,
 } from 'antd-mobile-icons'
@@ -93,10 +93,11 @@ export default function PlayBar({ onVideoPlay }) {
 
   // 初始化/更新 APlayer
   useEffect(() => {
-    if (!playInfo?.songId || !playerContainerRef.current) return
+    const currentPlayInfo = playInfoRef.current
+    if (!currentPlayInfo?.songId || !playerContainerRef.current) return
 
     // 如果是视频文件，交给VideoPlayer处理
-    if (isVideoFile(playInfo.filePath)) {
+    if (isVideoFile(currentPlayInfo.filePath)) {
       setIsVideoMode(true)
       // 先暂停音频，再销毁播放器，防止音频继续播放
       if (playerRef.current) {
@@ -124,7 +125,7 @@ export default function PlayBar({ onVideoPlay }) {
       }
       // 通知父组件显示视频
       if (onVideoPlay) {
-        onVideoPlay(playInfo)
+        onVideoPlay(currentPlayInfo)
       }
       return
     }
@@ -132,8 +133,8 @@ export default function PlayBar({ onVideoPlay }) {
     setIsVideoMode(false)
 
     // 音频模式：使用APlayer
-    const streamUrl = getMediaStreamUrl(playInfo.songId)
-    const coverUrl = getCoverUrl(playInfo.songId)
+    const streamUrl = getMediaStreamUrl(currentPlayInfo.songId)
+    const coverUrl = getCoverUrl(currentPlayInfo.songId)
 
     // 销毁旧播放器
     if (playerRef.current) {
@@ -149,7 +150,7 @@ export default function PlayBar({ onVideoPlay }) {
     const ap = new APlayer({
       container: playerContainerRef.current,
       mini: true,
-      autoplay: playInfo.playStatus === 'PLAYING',
+      autoplay: currentPlayInfo.playStatus === 'PLAYING',
       mutex: true,
       loop: false,
       volume: (() => {
@@ -158,8 +159,8 @@ export default function PlayBar({ onVideoPlay }) {
       })(),
       mute: isMuted,
       audio: [{
-        name: playInfo.songName || '未知歌曲',
-        artist: playInfo.singerName || '未知歌手',
+        name: currentPlayInfo.songName || '未知歌曲',
+        artist: currentPlayInfo.singerName || '未知歌手',
         url: streamUrl,
         cover: coverUrl,
         lrc: '', // Bug1修复：CurrentPlayVO 无 lyricPath 字段，暂不支持歌词
@@ -225,7 +226,7 @@ export default function PlayBar({ onVideoPlay }) {
         playerRef.current = null
       }
     }
-  }, [playInfo?.songId, onVideoPlay, orderId, fetchPlayStatus])
+  }, [playInfo?.songId, playInfo?.filePath, onVideoPlay, orderId, fetchPlayStatus])
 
   // 使用 ref 保存 playInfo，避免闭包陷阱
   const playInfoRef = useRef(playInfo)
@@ -350,7 +351,7 @@ export default function PlayBar({ onVideoPlay }) {
               disabled={operating}
               title={isPlaying ? '暂停' : '继续'}
             >
-              {isPlaying ? <PauseOutline fontSize={30} /> : <PlayOutline fontSize={30} />}
+              {isPlaying ? <StopOutline fontSize={30} /> : <PlayOutline fontSize={30} />}
             </button>
             <button className="ctrl-btn" onClick={handleNext} disabled={operating} title="切歌">
               <RightOutline fontSize={26} />

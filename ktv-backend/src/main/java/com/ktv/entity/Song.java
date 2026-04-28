@@ -1,4 +1,4 @@
-﻿package com.ktv.entity;
+package com.ktv.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;

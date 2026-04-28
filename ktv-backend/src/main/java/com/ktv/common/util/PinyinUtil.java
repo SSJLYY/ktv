@@ -1,6 +1,6 @@
-﻿package com.ktv.common.util;
+package com.ktv.common.util;
 
-import io.github.biezhi.tinypinyin.Pinyin;
+import com.github.promeg.pinyinhelper.Pinyin;
 
 /**
  * 拼音工具类

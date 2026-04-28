@@ -1,4 +1,4 @@
-﻿package com.ktv.common.exception;
+package com.ktv.common.exception;
 
 import com.ktv.common.result.ResultCode;
 import lombok.Getter;

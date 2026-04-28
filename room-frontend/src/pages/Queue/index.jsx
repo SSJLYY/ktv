@@ -185,7 +185,6 @@ function PlayedList({ orderId }) {
 
   useEffect(() => {
     let isMounted = true
-    setLoading(true)
     getPlayedList(orderId, 1, 100)
       .then((res) => {
         if (isMounted) setList(res.data?.records || [])

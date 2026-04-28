@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
@@ -73,7 +73,7 @@ const Room = () => {
 
   // 加载包厢列表
   // BugA1修复：后端返回 List<RoomVO>（res.data 是数组），不是 {records, total} 的分页结构
-  const loadRoomList = async () => {
+  const loadRoomList = useCallback(async () => {
     try {
       setLoading(true)
       const res = await getRoomList(queryParams)
@@ -83,11 +83,11 @@ const Room = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [queryParams])
 
   useEffect(() => {
     loadRoomList()
-  }, [queryParams])
+  }, [loadRoomList])
 
   // 搜索
   const handleSearch = () => {

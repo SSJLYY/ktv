@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tabs, SearchBar, Toast, DotLoading, Tag } from 'antd-mobile'
 import { AddOutline } from 'antd-mobile-icons'
-import { searchSongs, getAllSingers, getSongsBySinger, getAllCategories, getSongsByCategory, getHotSongs } from '../../api/song'
+import { searchSongs, getSongsBySinger, getAllCategories, getSongsByCategory, getHotSongs } from '../../api/song'
 import { addSongToQueue } from '../../api/queue'
 import useRoomStore from '../../store/roomStore'
 import SingerList from './SingerList'
@@ -132,7 +132,6 @@ function SingerSongs({ singerId, orderId, bumpQueueVersion }) {
 
   useEffect(() => {
     let isMounted = true
-    setLoading(true)
     getSongsBySinger(singerId, 1, 100)
       .then((res) => {
         if (isMounted) setSongs(res.data?.records || [])
@@ -156,7 +155,7 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
   const [categories, setCategories] = useState([])
   const [selectedCat, setSelectedCat] = useState(null)
   const [songs, setSongs] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let isMounted = true
@@ -175,7 +174,6 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
   useEffect(() => {
     if (!selectedCat) return
     let isMounted = true
-    setLoading(true)
     getSongsByCategory(selectedCat, 1, 100)
       .then((res) => {
         if (isMounted) setSongs(res.data?.records || [])
@@ -195,7 +193,10 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
             key={cat.id}
             round
             color={selectedCat === cat.id ? 'primary' : 'default'}
-            onClick={() => setSelectedCat(cat.id)}
+            onClick={() => {
+              setLoading(true)
+              setSelectedCat(cat.id)
+            }}
             style={{ '--font-size': '14px', padding: '6px 16px', marginRight: '8px', marginBottom: '8px' }}
           >
             {cat.name}
@@ -220,7 +221,6 @@ function HotTab({ orderId, bumpQueueVersion }) {
 
   useEffect(() => {
     let isMounted = true
-    setLoading(true)
     getHotSongs(50)
       .then((res) => {
         if (isMounted) setSongs(res.data || [])

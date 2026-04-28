@@ -1,4 +1,4 @@
-﻿package com.ktv.vo;
+package com.ktv.vo;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.ktv.common.enums.OrderStatusEnum;

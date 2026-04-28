@@ -1,4 +1,4 @@
-﻿package com.ktv.controller;
+package com.ktv.controller;
 
 import com.ktv.common.exception.BusinessException;
 import com.ktv.common.result.Result;
