@@ -7,7 +7,6 @@ import useRoomStore from '../../store/roomStore'
 import SingerList from './SingerList'
 import './index.css'
 
-/** 顶部搜索标签页 */
 const tabItems = [
   { key: 'search', title: '搜索' },
   { key: 'singer', title: '歌手' },
@@ -45,7 +44,6 @@ export default function Search() {
   )
 }
 
-// ==================== 搜索 Tab ====================
 function SearchTab({ orderId, bumpQueueVersion }) {
   const [keyword, setKeyword] = useState('')
   const [songs, setSongs] = useState([])
@@ -53,8 +51,6 @@ function SearchTab({ orderId, bumpQueueVersion }) {
   const [searched, setSearched] = useState(false)
   const timerRef = useRef(null)
 
-  // F-S2：useCallback 依赖数组为空是故意的：doSearch 只在 handleSearch 中通过 timerRef 调用，
-  // 内部通过参数 kw 接收搜索关键词，不依赖任何外部 state，避免不必要地重建函数
   const doSearch = useCallback(async (kw) => {
     if (!kw.trim()) {
       setSongs([])
@@ -66,8 +62,11 @@ function SearchTab({ orderId, bumpQueueVersion }) {
       const res = await searchSongs(kw.trim(), 1, 50)
       setSongs(res.data?.records || [])
       setSearched(true)
-    } catch { /* handled by interceptor */ }
-    finally { setLoading(false) }
+    } catch {
+      // handled by interceptor
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const handleSearch = (val) => {
@@ -76,7 +75,6 @@ function SearchTab({ orderId, bumpQueueVersion }) {
     timerRef.current = setTimeout(() => doSearch(val), 300)
   }
 
-  // 组件卸载时清理定时器
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -91,7 +89,11 @@ function SearchTab({ orderId, bumpQueueVersion }) {
         placeholder="输入歌名或拼音首字母"
         value={keyword}
         onChange={handleSearch}
-        onClear={() => { setKeyword(''); setSongs([]); setSearched(false) }}
+        onClear={() => {
+          setKeyword('')
+          setSongs([])
+          setSearched(false)
+        }}
         style={{
           '--font-size': '16px',
           '--height': '48px',
@@ -108,7 +110,6 @@ function SearchTab({ orderId, bumpQueueVersion }) {
   )
 }
 
-// ==================== 歌手 Tab ====================
 function SingerTab({ orderId, bumpQueueVersion }) {
   const [selectedSinger, setSelectedSinger] = useState(null)
 
@@ -116,7 +117,7 @@ function SingerTab({ orderId, bumpQueueVersion }) {
     return (
       <div className="singer-songs-view">
         <div className="view-header" onClick={() => setSelectedSinger(null)}>
-          ← {selectedSinger.name} 的歌曲
+          返回 {selectedSinger.name} 的歌曲
         </div>
         <SingerSongs singerId={selectedSinger.id} orderId={orderId} bumpQueueVersion={bumpQueueVersion} />
       </div>
@@ -150,7 +151,6 @@ function SingerSongs({ singerId, orderId, bumpQueueVersion }) {
   return <SongList songs={songs} orderId={orderId} bumpQueueVersion={bumpQueueVersion} />
 }
 
-// ==================== 分类 Tab ====================
 function CategoryTab({ orderId, bumpQueueVersion }) {
   const [categories, setCategories] = useState([])
   const [selectedCat, setSelectedCat] = useState(null)
@@ -168,7 +168,9 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
         }
       })
       .catch(() => {})
-    return () => { isMounted = false }
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   useEffect(() => {
@@ -182,7 +184,9 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
       .finally(() => {
         if (isMounted) setLoading(false)
       })
-    return () => { isMounted = false }
+    return () => {
+      isMounted = false
+    }
   }, [selectedCat])
 
   return (
@@ -214,7 +218,6 @@ function CategoryTab({ orderId, bumpQueueVersion }) {
   )
 }
 
-// ==================== 热门 Tab ====================
 function HotTab({ orderId, bumpQueueVersion }) {
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -229,7 +232,9 @@ function HotTab({ orderId, bumpQueueVersion }) {
       .finally(() => {
         if (isMounted) setLoading(false)
       })
-    return () => { isMounted = false }
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   if (loading) return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
@@ -237,7 +242,6 @@ function HotTab({ orderId, bumpQueueVersion }) {
   return <SongList songs={songs} orderId={orderId} bumpQueueVersion={bumpQueueVersion} showRank />
 }
 
-// ==================== 通用歌曲列表 ====================
 function SongList({ songs, orderId, bumpQueueVersion, showRank }) {
   const [addingId, setAddingId] = useState(null)
 
@@ -248,8 +252,11 @@ function SongList({ songs, orderId, bumpQueueVersion, showRank }) {
       await addSongToQueue(orderId, song.id)
       Toast.show({ content: `已点歌：${song.name}`, icon: 'success' })
       bumpQueueVersion()
-    } catch { /* handled */ }
-    finally { setAddingId(null) }
+    } catch {
+      // handled
+    } finally {
+      setAddingId(null)
+    }
   }
 
   return (

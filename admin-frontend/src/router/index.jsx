@@ -17,6 +17,11 @@ const Order = lazy(() => import('../pages/Order'))
 // 原因：store 在 persist 恢复前 token 为 null，直接读 localStorage 绕过了 Zustand 的状态管理
 const PrivateRoute = ({ children }) => {
   const token = useUserStore((state) => state.token)
+  const hasHydrated = useUserStore((state) => state.hasHydrated)
+
+  if (!hasHydrated) {
+    return null
+  }
   
   if (!token) {
     // 未登录,重定向到登录页
@@ -29,6 +34,11 @@ const PrivateRoute = ({ children }) => {
 // 公共路由 - 已登录用户访问登录页时重定向到首页
 const PublicRoute = ({ children }) => {
   const token = useUserStore((state) => state.token)
+  const hasHydrated = useUserStore((state) => state.hasHydrated)
+
+  if (!hasHydrated) {
+    return null
+  }
   
   if (token) {
     // 已登录,重定向到首页

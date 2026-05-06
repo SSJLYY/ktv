@@ -29,19 +29,28 @@ const router = createBrowserRouter([
       },
       {
         path: 'search',
-        lazy: () => import('../pages/Search/index.jsx'),
+        lazy: () =>
+          import('../pages/Search/index.jsx').then((module) => ({
+            Component: module.default,
+          })),
         hydrateFallbackElement: pageLoadingElement,
       },
       {
         path: 'queue',
-        lazy: () => import('../pages/Queue/index.jsx'),
+        lazy: () =>
+          import('../pages/Queue/index.jsx').then((module) => ({
+            Component: module.default,
+          })),
         hydrateFallbackElement: pageLoadingElement,
       },
     ],
   },
   {
     path: '/join',
-    lazy: () => import('../pages/Join/index.jsx'),
+    lazy: () =>
+      import('../pages/Join/index.jsx').then((module) => ({
+        Component: module.default,
+      })),
     hydrateFallbackElement: pageLoadingElement,
   },
 ])

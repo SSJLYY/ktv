@@ -82,43 +82,69 @@ public class MediaStreamController {
                     .body(resource);
         }
 
-        // 解析Range请求头
-        // 格式：bytes=start-end
         try {
-            String[] ranges = rangeHeader.replace("bytes=", "").split("-");
-            long start = Long.parseLong(ranges[0]);
-            long end = ranges.length > 1 && !ranges[1].isEmpty()
-                    ? Long.parseLong(ranges[1])
-                    : fileSize - 1;
+            ByteRange range = parseRange(rangeHeader, fileSize);
+            long contentLength = range.end() - range.start() + 1;
 
-            // 限制范围
-            if (start >= fileSize) {
-                start = 0;
-            }
-            if (end >= fileSize) {
-                end = fileSize - 1;
-            }
-
-            long contentLength = end - start + 1;
-
-            log.info("Range请求：songId={}, start={}, end={}, length={}", songId, start, end, contentLength);
+            log.info("Range请求：songId={}, start={}, end={}, length={}", songId, range.start(), range.end(), contentLength);
 
             // 返回206 Partial Content（使用ResourceRegion让Spring自动处理部分内容传输）
-            ResourceRegion region = new ResourceRegion(resource, start, contentLength);
+            ResourceRegion region = new ResourceRegion(resource, range.start(), contentLength);
             return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
                     .contentType(MediaType.parseMediaType(mediaType))
                     .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes %d-%d/%d".formatted(range.start(), range.end(), fileSize))
                     .contentLength(contentLength)
                     .body(region);
 
-        } catch (NumberFormatException e) {
+        } catch (IllegalArgumentException e) {
             log.error("Range请求解析失败", e);
-            // 解析失败，返回整个文件
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(mediaType))
-                    .contentLength(fileSize)
-                    .body(resource);
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, "bytes */" + fileSize)
+                    .build();
         }
+    }
+
+    private ByteRange parseRange(String rangeHeader, long fileSize) {
+        if (fileSize <= 0) {
+            throw new IllegalArgumentException("empty media file");
+        }
+        if (rangeHeader == null || !rangeHeader.startsWith("bytes=")) {
+            throw new IllegalArgumentException("unsupported range header: " + rangeHeader);
+        }
+
+        String rawRange = rangeHeader.substring("bytes=".length()).trim();
+        if (rawRange.isEmpty()) {
+            throw new IllegalArgumentException("empty range header");
+        }
+
+        String firstRange = rawRange.split(",", 2)[0].trim();
+        String[] bounds = firstRange.split("-", 2);
+        if (bounds.length != 2) {
+            throw new IllegalArgumentException("invalid range: " + rangeHeader);
+        }
+
+        long start;
+        long end;
+        if (bounds[0].isEmpty()) {
+            long suffixLength = Long.parseLong(bounds[1]);
+            if (suffixLength <= 0) {
+                throw new IllegalArgumentException("invalid suffix range: " + rangeHeader);
+            }
+            long normalizedLength = Math.min(suffixLength, fileSize);
+            start = fileSize - normalizedLength;
+            end = fileSize - 1;
+        } else {
+            start = Long.parseLong(bounds[0]);
+            end = bounds[1].isEmpty() ? fileSize - 1 : Long.parseLong(bounds[1]);
+        }
+
+        if (start < 0 || start >= fileSize || end < start) {
+            throw new IllegalArgumentException("range out of bounds: " + rangeHeader);
+        }
+
+        return new ByteRange(start, Math.min(end, fileSize - 1));
     }
 
     /**
@@ -228,5 +254,8 @@ public class MediaStreamController {
         public void setCoverUrl(String coverUrl) {
             this.coverUrl = coverUrl;
         }
+    }
+
+    private record ByteRange(long start, long end) {
     }
 }

@@ -13,6 +13,7 @@ const tabItems = [
 export default function Queue() {
   const orderId = useRoomStore((s) => s.orderId)
   const queueVersion = useRoomStore((s) => s.queueVersion)
+  const bumpQueueVersion = useRoomStore((s) => s.bumpQueueVersion)
   const [activeTab, setActiveTab] = useState('queue')
 
   return (
@@ -32,7 +33,7 @@ export default function Queue() {
       </Tabs>
       <div className="queue-content">
         {activeTab === 'queue' && (
-          <QueueList orderId={orderId} queueVersion={queueVersion} />
+          <QueueList orderId={orderId} queueVersion={queueVersion} bumpQueueVersion={bumpQueueVersion} />
         )}
         {activeTab === 'played' && (
           <PlayedList orderId={orderId} />
@@ -43,7 +44,7 @@ export default function Queue() {
 }
 
 // ==================== 待唱列表 ====================
-function QueueList({ orderId, queueVersion }) {
+function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
   const [operatingId, setOperatingId] = useState(null)
@@ -95,6 +96,7 @@ function QueueList({ orderId, queueVersion }) {
     try {
       await topSong(orderId, item.id)
       Toast.show({ content: '已置顶', icon: 'success' })
+      bumpQueueVersion()
       fetchQueue()
     } catch { /* handled */ }
     finally { setOperatingId(null) }
@@ -112,6 +114,7 @@ function QueueList({ orderId, queueVersion }) {
     try {
       await removeSong(orderId, item.id)
       Toast.show({ content: '已取消', icon: 'success' })
+      bumpQueueVersion()
       fetchQueue()
     } catch { /* handled */ }
     finally { setOperatingId(null) }
@@ -182,19 +185,50 @@ function QueueList({ orderId, queueVersion }) {
 function PlayedList({ orderId }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
+  const timerRef = useRef(null)
+  const initialLoadTimerRef = useRef(null)
+
+  const fetchPlayedList = useCallback(async () => {
+    const res = await getPlayedList(orderId, 1, 100)
+    setList(res.data?.records || [])
+  }, [orderId])
 
   useEffect(() => {
     let isMounted = true
-    getPlayedList(orderId, 1, 100)
-      .then((res) => {
-        if (isMounted) setList(res.data?.records || [])
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (isMounted) setLoading(false)
-      })
-    return () => { isMounted = false }
-  }, [orderId])
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+    }
+    if (initialLoadTimerRef.current) {
+      clearTimeout(initialLoadTimerRef.current)
+    }
+
+    initialLoadTimerRef.current = setTimeout(() => {
+      fetchPlayedList()
+        .catch(() => {})
+        .finally(() => {
+          if (isMounted) setLoading(false)
+        })
+    }, 0)
+
+    timerRef.current = setInterval(() => {
+      if (isMounted) {
+        fetchPlayedList().catch(() => {})
+      }
+    }, 5000)
+
+    return () => {
+      isMounted = false
+      if (initialLoadTimerRef.current) {
+        clearTimeout(initialLoadTimerRef.current)
+        initialLoadTimerRef.current = null
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [fetchPlayedList])
 
   if (loading) return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
   if (list.length === 0) return <div className="empty-text">暂无已唱歌曲</div>

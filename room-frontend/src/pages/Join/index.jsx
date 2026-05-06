@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input, Button, Toast } from 'antd-mobile'
 import useRoomStore from '../../store/roomStore'
@@ -6,10 +6,29 @@ import request from '../../api/request'
 import './index.css'
 
 export default function Join() {
+  const isDev = import.meta.env.DEV
   const navigate = useNavigate()
+  const orderId = useRoomStore((s) => s.orderId)
+  const hasHydrated = useRoomStore((s) => s.hasHydrated)
   const setOrderId = useRoomStore((s) => s.setOrderId)
   const [orderIdInput, setOrderIdInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const quickJoinTimerRef = useRef(null)
+
+  useEffect(() => {
+    if (hasHydrated && orderId) {
+      navigate('/search', { replace: true })
+    }
+  }, [hasHydrated, orderId, navigate])
+
+  useEffect(() => {
+    return () => {
+      if (quickJoinTimerRef.current) {
+        clearTimeout(quickJoinTimerRef.current)
+        quickJoinTimerRef.current = null
+      }
+    }
+  }, [])
 
   const handleJoin = async () => {
     // M26修复：验证orderId为正整数
@@ -48,13 +67,22 @@ export default function Join() {
   const [quickJoinCooldown, setQuickJoinCooldown] = useState(false)
   
   const handleQuickJoin = async () => {
+    if (!isDev) {
+      return
+    }
     if (quickJoinCooldown) {
       Toast.show({ content: '请稍后再试', icon: 'fail' })
       return
     }
     
     setQuickJoinCooldown(true)
-    setTimeout(() => setQuickJoinCooldown(false), 60000) // 60秒冷却
+    if (quickJoinTimerRef.current) {
+      clearTimeout(quickJoinTimerRef.current)
+    }
+    quickJoinTimerRef.current = setTimeout(() => {
+      setQuickJoinCooldown(false)
+      quickJoinTimerRef.current = null
+    }, 60000) // 60秒冷却
     
     try {
       const res = await request.get('/api/room/orders/1')
@@ -100,15 +128,17 @@ export default function Join() {
         >
           加入包厢
         </Button>
-        <Button
-          block
-          fill="outline"
-          size="large"
-          onClick={handleQuickJoin}
-          style={{ '--height': '48px', marginTop: '12px' }}
-        >
-          快速加入（开发模式）
-        </Button>
+        {isDev && (
+          <Button
+            block
+            fill="outline"
+            size="large"
+            onClick={handleQuickJoin}
+            style={{ '--height': '48px', marginTop: '12px' }}
+          >
+            快速加入（开发模式）
+          </Button>
+        )}
       </div>
     </div>
   )

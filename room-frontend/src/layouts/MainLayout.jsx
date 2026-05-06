@@ -16,27 +16,27 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const orderId = useRoomStore((s) => s.orderId)
-  // 视频播放状态
+  const hasHydrated = useRoomStore((s) => s.hasHydrated)
   const [videoPlayInfo, setVideoPlayInfo] = useState(null)
 
-  // 未绑定包厢时跳转到加入页面
   useEffect(() => {
+    if (!hasHydrated) {
+      return
+    }
     if (!orderId) {
       navigate('/join', { replace: true })
     }
-  }, [orderId, navigate])
+  }, [hasHydrated, orderId, navigate])
 
-  // 处理视频播放 - 使用 useCallback 避免子组件重渲染
   const handleVideoPlay = useCallback((playInfo) => {
     setVideoPlayInfo(playInfo)
   }, [])
 
-  // 关闭视频播放器 - 使用 useCallback 避免子组件重渲染
   const handleVideoClose = useCallback(() => {
     setVideoPlayInfo(null)
   }, [])
 
-  if (!orderId) return null
+  if (!hasHydrated || !orderId) return null
 
   return (
     <div className="main-layout">
@@ -44,7 +44,6 @@ export default function MainLayout() {
         <Outlet />
       </div>
       <PlayBar onVideoPlay={handleVideoPlay} />
-      {/* 视频播放器 */}
       {videoPlayInfo && (
         <VideoPlayer playInfo={videoPlayInfo} onClose={handleVideoClose} />
       )}

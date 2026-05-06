@@ -11,6 +11,8 @@ export const useUserStore = create(
     (set) => ({
       token: null,
       userInfo: null,
+      hasHydrated: false,
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       
       // 设置Token（persist 会自动同步到 localStorage，无需手动操作）
       setToken: (token) => {
@@ -30,6 +32,9 @@ export const useUserStore = create(
     {
       name: 'user-storage', // localStorage key
       partialize: (state) => ({ token: state.token, userInfo: state.userInfo }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated?.(true)
+      },
     }
   )
 )
