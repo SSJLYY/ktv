@@ -24,7 +24,7 @@
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
-    <!-- O4修复：抽取重复的歌曲VO列定义，避免多处重复 -->
+    <!-- 提取复用的歌曲 VO 列定义，避免多处重复 -->
     <sql id="Song_VO_Columns">
         s.id, s.name, s.singer_id, s.category_id, s.pinyin, s.pinyin_initial,
         s.language, s.duration, s.file_path, s.cover_url, s.lyric_path,
@@ -34,7 +34,7 @@
         c.name as category_name
     </sql>
 
-    <!-- 根据ID查询单首歌曲（含歌手名、分类名，不过滤status） -->
+    <!-- 根据 ID 查询单首歌曲，包含歌手名和分类名，不过滤状态 -->
     <select id="selectVOById" resultMap="SongVOMap">
         SELECT
             <include refid="Song_VO_Columns"/>
@@ -44,7 +44,7 @@
         WHERE s.deleted = 0 AND s.id = #{id}
     </select>
 
-    <!-- S1修复：根据ID列表批量查询歌曲（含歌手名、分类名） -->
+    <!-- 根据 ID 列表批量查询歌曲，包含歌手名和分类名 -->
     <select id="selectVOByIds" resultMap="SongVOMap">
         SELECT
             <include refid="Song_VO_Columns"/>
@@ -58,10 +58,10 @@
     </select>
 
     <!--
-        原来 WHERE s.deleted = 0 AND s.status = 1 导致管理员在后台看不到下架歌曲，
-        无法对其进行重新上架、编辑、删除等管理操作。
-        修复：移除 AND s.status = 1，管理端展示全部状态（上架+下架）。
-        包厢端搜索（searchByKeyword/selectBySingerId/selectByCategoryId）保持 status=1 过滤。
+        原来 WHERE s.deleted = 0 AND s.status = 1 会导致管理员在后台看不到下架歌曲，
+        无法对其重新上架、编辑或删除。
+        这里移除 AND s.status = 1，让管理端展示全部状态的歌曲。
+        包厢端搜索和按歌手、分类查询仍然保留 status = 1 过滤。
     -->
     <select id="selectPageWithConditions" resultMap="SongVOMap">
         SELECT
@@ -107,7 +107,7 @@
           s.id DESC
     </select>
 
-    <!-- 按歌手查询歌曲（分页） -->
+    <!-- 按歌手查询歌曲 -->
     <select id="selectBySingerId" resultMap="SongVOMap">
         SELECT
             <include refid="Song_VO_Columns"/>
@@ -118,7 +118,7 @@
         ORDER BY s.name ASC
     </select>
 
-    <!-- 按分类查询歌曲（分页） -->
+    <!-- 按分类查询歌曲 -->
     <select id="selectByCategoryId" resultMap="SongVOMap">
         SELECT
             <include refid="Song_VO_Columns"/>

@@ -22,29 +22,26 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 歌曲Service实现
- * 
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌曲服务实现。
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements SongService {
 
+    private static final long CACHE_TTL_HOURS = 1;
+
     private final SongMapper songMapper;
     private final SingerService singerService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
-
-    /**
-     * 歌曲缓存TTL（1小时）
-     */
-    private static final long CACHE_TTL_HOURS = 1;
 
     @Override
     public IPage<SongVO> getSongPage(Integer current, Integer size, String name, Long singerId, Long categoryId, String language, Integer status) {
@@ -55,7 +52,6 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createSong(SongDTO songDTO) {
-        // 检查歌手是否存在
         Singer singer = singerService.getById(songDTO.getSingerId());
         if (singer == null) {
             throw new BusinessException("歌手不存在");
@@ -63,12 +59,9 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
-
-        // 自动生成拼音（使用 PinyinUtil 统一封装）
         song.setPinyin(PinyinUtil.getPinyin(song.getName()));
         song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
 
-        // 设置默认值
         if (song.getLanguage() == null || song.getLanguage().isEmpty()) {
             song.setLanguage("国语");
         }
@@ -87,13 +80,8 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         song.setPlayCount(0);
 
         songMapper.insert(song);
-
-        // S13修复：使用 SQL 原子更新歌曲数量，避免并发时的读-改-写竞态条件
         singerService.update().eq("id", songDTO.getSingerId()).setSql("song_count = song_count + 1").update();
-
-        // 刷新Redis缓存
-        refreshSongCache(song.getId());
-
+        registerAfterCommit(() -> refreshSongCache(song.getId()));
         return song.getId();
     }
 
@@ -104,13 +92,10 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         if (existSong == null) {
             throw new BusinessException("歌曲不存在");
         }
-
-        // BugB2修复：singerId 为 null 时给出明确错误，而不是让 getById(null) 引发 NPE
         if (songDTO.getSingerId() == null) {
             throw new BusinessException("歌手ID不能为空");
         }
 
-        // 检查歌手是否存在
         Singer newSinger = singerService.getById(songDTO.getSingerId());
         if (newSinger == null) {
             throw new BusinessException("歌手不存在");
@@ -120,8 +105,6 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         BeanUtils.copyProperties(songDTO, song);
         song.setId(id);
 
-        // Bug10修复：元数据更新不应覆盖已上传的文件路径
-        // 若 DTO 中对应字段为 null，则保留数据库中的原始值
         if (song.getFilePath() == null) {
             song.setFilePath(existSong.getFilePath());
         }
@@ -132,15 +115,11 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setLyricPath(existSong.getLyricPath());
         }
 
-        // 如果修改了歌曲名，更新拼音
-        // BugD3修复：song.getName() 可能为 null（@Valid 的 @NotBlank 仅在 Create 分组生效，
-        // 直接调 PUT 接口不传 name 时会 NPE）；使用 existSong.getName().equals() 时加 null 防御
         if (song.getName() == null) {
-            // 未传歌曲名则保留原名，拼音也不更新
             song.setName(existSong.getName());
             song.setPinyin(existSong.getPinyin());
             song.setPinyinInitial(existSong.getPinyinInitial());
-        } else if (!existSong.getName().equals(song.getName())) {
+        } else if (!Objects.equals(existSong.getName(), song.getName())) {
             song.setPinyin(PinyinUtil.getPinyin(song.getName()));
             song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
         } else {
@@ -148,14 +127,18 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setPinyinInitial(existSong.getPinyinInitial());
         }
 
-        // H5修复：如果修改了歌手，使用Objects.equals防止NPE
-        if (!java.util.Objects.equals(existSong.getSingerId(), song.getSingerId())) {
+        if (!Objects.equals(existSong.getSingerId(), song.getSingerId())) {
             Singer oldSinger = singerService.getById(existSong.getSingerId());
-            String oldSingerName = oldSinger != null ? oldSinger.getName() : existSong.getSingerId().toString();
-            String newSingerName = newSinger.getName();
-            log.info("歌曲[{}]歌手变更：{} → {}（songId={}, 旧singerId={}, 新singerId={}）",
-                    song.getName(), oldSingerName, newSingerName,
-                    id, existSong.getSingerId(), song.getSingerId());
+            String oldSingerName = oldSinger != null ? oldSinger.getName() : String.valueOf(existSong.getSingerId());
+            log.info(
+                    "歌曲[{}]歌手变更: {} -> {} (songId={}, oldSingerId={}, newSingerId={})",
+                    song.getName(),
+                    oldSingerName,
+                    newSinger.getName(),
+                    id,
+                    existSong.getSingerId(),
+                    song.getSingerId()
+            );
 
             singerService.update().eq("id", existSong.getSingerId())
                     .setSql("song_count = GREATEST(song_count - 1, 0)").update();
@@ -163,13 +146,10 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
                     .setSql("song_count = song_count + 1").update();
         }
 
-        Boolean success = songMapper.updateById(song) > 0;
-
-        // 刷新Redis缓存
+        boolean success = songMapper.updateById(song) > 0;
         if (success) {
-            refreshSongCache(id);
+            registerAfterCommit(() -> refreshSongCache(id));
         }
-
         return success;
     }
 
@@ -181,70 +161,77 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             throw new BusinessException("歌曲不存在");
         }
 
-        // S13修复：使用 SQL 原子更新歌曲数量
         singerService.update().eq("id", song.getSingerId())
                 .setSql("song_count = GREATEST(song_count - 1, 0)").update();
 
-        // MyBatis-Plus逻辑删除
-        Boolean success = songMapper.deleteById(id) > 0;
-
-        // 清除Redis缓存
+        boolean success = songMapper.deleteById(id) > 0;
         if (success) {
-            String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
-            stringRedisTemplate.delete(cacheKey);
+            registerAfterCommit(() -> stringRedisTemplate.delete(RedisKeyConstants.buildSongCacheKey(id)));
         }
-
         return success;
     }
 
     @Override
     public SongVO getSongById(Long id) {
-        // 先从Redis缓存获取（使用StringRedisTemplate + JSON序列化，避免Jackson反序列化ClassCastException）
         String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
         String cached = stringRedisTemplate.opsForValue().get(cacheKey);
         if (cached != null) {
             try {
                 return objectMapper.readValue(cached, SongVO.class);
             } catch (JsonProcessingException e) {
-                log.warn("Redis缓存反序列化失败，cacheKey={}，将从数据库重新加载", cacheKey);
+                log.warn("Redis 缓存反序列化失败，cacheKey={}，将从数据库重新加载", cacheKey);
                 stringRedisTemplate.delete(cacheKey);
             }
         }
 
-        // 从数据库按ID查询（含关联歌手名、分类名）
         SongVO songVO = songMapper.selectVOById(id);
         if (songVO == null) {
             throw new BusinessException("歌曲不存在");
         }
 
-        // 存入Redis缓存（带TTL，JSON字符串格式）
         try {
-            stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(songVO), CACHE_TTL_HOURS, TimeUnit.HOURS);
+            stringRedisTemplate.opsForValue().set(
+                    cacheKey,
+                    objectMapper.writeValueAsString(songVO),
+                    CACHE_TTL_HOURS,
+                    TimeUnit.HOURS
+            );
         } catch (JsonProcessingException e) {
-            log.warn("Redis缓存序列化失败，cacheKey={}", cacheKey);
+            log.warn("Redis 缓存序列化失败，cacheKey={}", cacheKey);
         }
-
         return songVO;
     }
 
-    /**
-     * 刷新歌曲缓存（带TTL）
-     *
-     * @param id 歌曲ID
-     */
     @Override
     public void refreshSongCache(Long id) {
         String cacheKey = RedisKeyConstants.buildSongCacheKey(id);
-        // 先清除旧缓存
         stringRedisTemplate.delete(cacheKey);
-        // 重新从数据库加载并写入缓存
+
         SongVO songVO = songMapper.selectVOById(id);
         if (songVO != null) {
             try {
-                stringRedisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(songVO), CACHE_TTL_HOURS, TimeUnit.HOURS);
+                stringRedisTemplate.opsForValue().set(
+                        cacheKey,
+                        objectMapper.writeValueAsString(songVO),
+                        CACHE_TTL_HOURS,
+                        TimeUnit.HOURS
+                );
             } catch (JsonProcessingException e) {
-                log.warn("Redis缓存序列化失败，cacheKey={}", cacheKey);
+                log.warn("Redis 缓存序列化失败，cacheKey={}", cacheKey);
             }
         }
+    }
+
+    private void registerAfterCommit(Runnable task) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            task.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                task.run();
+            }
+        });
     }
 }

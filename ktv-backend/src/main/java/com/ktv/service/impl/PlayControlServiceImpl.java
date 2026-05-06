@@ -15,8 +15,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -27,6 +30,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     private static final String PLAYING = "PLAYING";
     private static final String PAUSED = "PAUSED";
     private static final String NONE = "NONE";
+    private static final long KEY_TTL_HOURS = 24;
 
     private final OrderMapper orderMapper;
     private final OrderSongMapper orderSongMapper;
@@ -36,135 +40,106 @@ public class PlayControlServiceImpl implements PlayControlService {
     @Transactional(rollbackFor = Exception.class)
     public void next(Long orderId) {
         assertActiveOrder(orderId);
-        log.info("切歌，orderId={}", orderId);
+        log.info("切歌: orderId={}", orderId);
 
-        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-
-        if (currentOrderSongId != null) {
-            OrderSong currentSong = orderSongMapper.selectById(currentOrderSongId);
-            if (currentSong != null && currentSong.isPlaying()) {
-                currentSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
-                currentSong.setFinishTime(LocalDateTime.now());
-                orderSongMapper.updateById(currentSong);
-            }
+        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+        if (currentSong != null && currentSong.isPlaying()) {
+            currentSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
+            currentSong.setFinishTime(LocalDateTime.now());
+            orderSongMapper.updateById(currentSong);
         }
 
-        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
-        OrderSong nextSong = pollNextPlayableSong(orderId, queueKey);
+        OrderSong nextSong = findNextWaitingSong(orderId);
         if (nextSong == null) {
-            clearCurrentPlaybackState(orderId, playingKey);
-            log.info("队列为空或仅剩无效数据，已清除播放状态，orderId={}", orderId);
+            registerPlaybackStateRefresh(orderId, null, NONE, true);
+            log.info("切歌完成: 队列为空, orderId={}", orderId);
             return;
         }
 
-        Long nextSongId = nextSong.getId();
         nextSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
         nextSong.setPlayTime(LocalDateTime.now());
+        nextSong.setFinishTime(null);
         orderSongMapper.updateById(nextSong);
 
-        redisTemplate.opsForValue().set(playingKey, String.valueOf(nextSongId), 24, TimeUnit.HOURS);
-        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
-
-        log.info("切歌成功，下一首：orderSongId={}, songName={}", nextSongId, nextSong.getSongName());
+        registerPlaybackStateRefresh(orderId, nextSong.getId(), PLAYING, true);
+        log.info("切歌成功: orderId={}, orderSongId={}, songName={}", orderId, nextSong.getId(), nextSong.getSongName());
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void replay(Long orderId) {
         assertActiveOrder(orderId);
-        log.info("重唱，orderId={}", orderId);
+        log.info("重唱: orderId={}", orderId);
 
-        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-        if (currentOrderSongId == null) {
+        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+        if (currentSong == null) {
             throw new BusinessException("当前没有播放的歌曲");
         }
 
-        OrderSong currentSong = orderSongMapper.selectById(currentOrderSongId);
-        if (currentSong == null) {
-            clearCurrentPlaybackState(orderId, playingKey);
-            throw new BusinessException("当前歌曲不存在");
-        }
-
+        currentSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
         currentSong.setPlayTime(LocalDateTime.now());
+        currentSong.setFinishTime(null);
         orderSongMapper.updateById(currentSong);
 
-        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
-
-        log.info("重唱成功，orderSongId={}, songName={}", currentOrderSongId, currentSong.getSongName());
+        registerPlaybackStateRefresh(orderId, currentSong.getId(), PLAYING, false);
+        log.info("重唱成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
     }
 
     @Override
     public void pause(Long orderId) {
         assertActiveOrder(orderId);
-        log.info("暂停播放，orderId={}", orderId);
+        log.info("暂停播放: orderId={}", orderId);
 
-        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-        if (currentOrderSongId == null) {
+        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+        if (currentSong == null) {
             throw new BusinessException("当前没有播放的歌曲");
         }
 
-        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        redisTemplate.opsForValue().set(statusKey, PAUSED, 24, TimeUnit.HOURS);
-
-        log.info("暂停播放成功，orderId={}", orderId);
+        writePlaybackState(orderId, currentSong.getId(), PAUSED);
+        log.info("暂停播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
     }
 
     @Override
     public void resume(Long orderId) {
         assertActiveOrder(orderId);
-        log.info("恢复播放，orderId={}", orderId);
+        log.info("恢复播放: orderId={}", orderId);
 
-        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-        if (currentOrderSongId == null) {
+        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+        if (currentSong == null) {
             throw new BusinessException("当前没有播放的歌曲");
         }
 
-        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        redisTemplate.opsForValue().set(statusKey, PLAYING, 24, TimeUnit.HOURS);
-
-        log.info("恢复播放成功，orderId={}", orderId);
+        writePlaybackState(orderId, currentSong.getId(), PLAYING);
+        log.info("恢复播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
     }
 
     @Override
     public CurrentPlayVO getCurrentPlayStatus(Long orderId) {
         assertActiveOrder(orderId);
-        log.info("查询当前播放状态，orderId={}", orderId);
+        log.info("查询当前播放状态: orderId={}", orderId);
 
         CurrentPlayVO vo = new CurrentPlayVO();
-        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        String playStatus = redisTemplate.opsForValue().get(statusKey);
-        vo.setPlayStatus(playStatus != null ? playStatus : NONE);
-
-        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-        if (currentOrderSongId != null) {
-            OrderSong orderSong = orderSongMapper.findSongInfoById(currentOrderSongId);
-            if (orderSong != null) {
-                vo.setOrderSongId(orderSong.getId());
-                vo.setSongId(orderSong.getSongId());
-                vo.setSongName(orderSong.getSongName());
-                vo.setSingerName(orderSong.getSingerName());
-                vo.setDuration(orderSong.getDuration());
-                vo.setFilePath(orderSong.getFilePath());
-                vo.setPlayTime(orderSong.getPlayTime());
-            } else {
-                clearCurrentPlaybackState(orderId, playingKey);
-                vo.setPlayStatus(NONE);
-            }
-        } else {
+        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+        if (currentSong == null) {
+            clearCurrentPlaybackState(orderId);
             vo.setPlayStatus(NONE);
+        } else {
+            String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
+            String playStatus = redisTemplate.opsForValue().get(statusKey);
+            vo.setPlayStatus(playStatus != null ? playStatus : PLAYING);
+            vo.setOrderSongId(currentSong.getId());
+            vo.setSongId(currentSong.getSongId());
+            vo.setSongName(currentSong.getSongName());
+            vo.setSingerName(currentSong.getSingerName());
+            vo.setDuration(currentSong.getDuration());
+            vo.setFilePath(currentSong.getFilePath());
+            vo.setPlayTime(currentSong.getPlayTime());
         }
 
         Long waitingCount = orderSongMapper.selectCount(new LambdaQueryWrapper<OrderSong>()
                 .eq(OrderSong::getOrderId, orderId)
                 .eq(OrderSong::getStatus, OrderSongStatusEnum.WAITING.getCode()));
         vo.setQueueRemaining(waitingCount != null ? waitingCount.intValue() : 0);
-
         return vo;
     }
 
@@ -174,64 +149,124 @@ public class PlayControlServiceImpl implements PlayControlService {
             throw new BusinessException("订单不存在");
         }
         if (!order.isActive()) {
-            clearCurrentPlaybackState(orderId, RedisKeyConstants.buildPlayingKey(orderId));
+            clearCurrentPlaybackState(orderId);
             redisTemplate.delete(RedisKeyConstants.buildQueueKey(orderId));
             throw new BusinessException("该订单不在进行中");
         }
     }
 
-    private OrderSong pollNextPlayableSong(Long orderId, String queueKey) {
-        while (true) {
-            String nextSongIdStr = redisTemplate.opsForList().leftPop(queueKey);
-            if (nextSongIdStr == null) {
-                return null;
+    private OrderSong resolveCurrentPlayingSong(Long orderId, boolean repairRedisState) {
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
+        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
+        if (currentOrderSongId != null) {
+            OrderSong song = orderSongMapper.findSongInfoById(currentOrderSongId);
+            if (song != null && orderId.equals(song.getOrderId()) && song.isPlaying()) {
+                return song;
             }
-
-            Long nextSongId;
-            try {
-                nextSongId = Long.parseLong(nextSongIdStr);
-            } catch (NumberFormatException e) {
-                log.warn("队列中歌曲ID格式错误，orderId={}, value={}", orderId, nextSongIdStr);
-                continue;
-            }
-
-            OrderSong nextSong = orderSongMapper.selectById(nextSongId);
-            if (nextSong == null) {
-                log.warn("队列中的点歌记录不存在，orderId={}, orderSongId={}", orderId, nextSongId);
-                continue;
-            }
-            if (!orderId.equals(nextSong.getOrderId())) {
-                log.warn("队列中的点歌记录不属于当前订单，orderId={}, orderSongId={}, recordOrderId={}",
-                        orderId, nextSongId, nextSong.getOrderId());
-                continue;
-            }
-            if (!nextSong.isWaiting()) {
-                log.warn("队列中的点歌记录状态不可播放，orderId={}, orderSongId={}, status={}",
-                        orderId, nextSongId, nextSong.getStatus());
-                continue;
-            }
-            return nextSong;
         }
+
+        OrderSong fallbackSong = orderSongMapper.findSongInfoById(selectCurrentPlayingRecordId(orderId));
+        if (fallbackSong != null && repairRedisState) {
+            writePlaybackState(orderId, fallbackSong.getId(), PLAYING);
+        }
+        return fallbackSong;
+    }
+
+    private Long selectCurrentPlayingRecordId(Long orderId) {
+        OrderSong currentSong = orderSongMapper.selectOne(new LambdaQueryWrapper<OrderSong>()
+                .select(OrderSong::getId, OrderSong::getOrderId, OrderSong::getStatus, OrderSong::getPlayTime)
+                .eq(OrderSong::getOrderId, orderId)
+                .eq(OrderSong::getStatus, OrderSongStatusEnum.PLAYING.getCode())
+                .orderByDesc(OrderSong::getPlayTime)
+                .orderByDesc(OrderSong::getId)
+                .last("LIMIT 1"));
+        return currentSong != null ? currentSong.getId() : null;
+    }
+
+    private OrderSong findNextWaitingSong(Long orderId) {
+        return orderSongMapper.selectOne(new LambdaQueryWrapper<OrderSong>()
+                .eq(OrderSong::getOrderId, orderId)
+                .eq(OrderSong::getStatus, OrderSongStatusEnum.WAITING.getCode())
+                .orderByAsc(OrderSong::getSortOrder)
+                .orderByAsc(OrderSong::getCreateTime)
+                .orderByAsc(OrderSong::getId)
+                .last("LIMIT 1"));
     }
 
     private Long parsePlayingOrderSongId(Long orderId, String playingKey) {
         String currentOrderSongIdStr = redisTemplate.opsForValue().get(playingKey);
-        if (currentOrderSongIdStr == null) {
+        if (currentOrderSongIdStr == null || currentOrderSongIdStr.isBlank()) {
             return null;
         }
 
         try {
             return Long.parseLong(currentOrderSongIdStr);
         } catch (NumberFormatException e) {
-            log.warn("当前播放记录ID格式错误，orderId={}, value={}", orderId, currentOrderSongIdStr);
-            clearCurrentPlaybackState(orderId, playingKey);
+            log.warn("播放记录格式错误: orderId={}, value={}", orderId, currentOrderSongIdStr);
+            clearCurrentPlaybackState(orderId);
             return null;
         }
     }
 
-    private void clearCurrentPlaybackState(Long orderId, String playingKey) {
-        redisTemplate.delete(playingKey);
+    private void registerPlaybackStateRefresh(Long orderId, Long orderSongId, String status, boolean refreshQueue) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            writePlaybackState(orderId, orderSongId, status);
+            if (refreshQueue) {
+                refreshQueueCache(orderId);
+            }
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                writePlaybackState(orderId, orderSongId, status);
+                if (refreshQueue) {
+                    refreshQueueCache(orderId);
+                }
+            }
+        });
+    }
+
+    private void writePlaybackState(Long orderId, Long orderSongId, String status) {
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
         String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-        redisTemplate.opsForValue().set(statusKey, NONE, 24, TimeUnit.HOURS);
+
+        if (orderSongId == null) {
+            redisTemplate.delete(playingKey);
+            redisTemplate.opsForValue().set(statusKey, NONE, KEY_TTL_HOURS, TimeUnit.HOURS);
+            return;
+        }
+
+        redisTemplate.opsForValue().set(playingKey, String.valueOf(orderSongId), KEY_TTL_HOURS, TimeUnit.HOURS);
+        redisTemplate.opsForValue().set(statusKey, status, KEY_TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    private void refreshQueueCache(Long orderId) {
+        String queueKey = RedisKeyConstants.buildQueueKey(orderId);
+        List<OrderSong> waitingSongs = orderSongMapper.selectList(new LambdaQueryWrapper<OrderSong>()
+                .select(OrderSong::getId)
+                .eq(OrderSong::getOrderId, orderId)
+                .eq(OrderSong::getStatus, OrderSongStatusEnum.WAITING.getCode())
+                .orderByAsc(OrderSong::getSortOrder)
+                .orderByAsc(OrderSong::getCreateTime)
+                .orderByAsc(OrderSong::getId));
+
+        redisTemplate.delete(queueKey);
+        if (waitingSongs.isEmpty()) {
+            return;
+        }
+
+        String[] ids = waitingSongs.stream()
+                .map(OrderSong::getId)
+                .map(String::valueOf)
+                .toArray(String[]::new);
+        redisTemplate.opsForList().rightPushAll(queueKey, ids);
+        redisTemplate.expire(queueKey, KEY_TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    private void clearCurrentPlaybackState(Long orderId) {
+        redisTemplate.delete(RedisKeyConstants.buildPlayingKey(orderId));
+        redisTemplate.opsForValue().set(RedisKeyConstants.buildPlayStatusKey(orderId), NONE, KEY_TTL_HOURS, TimeUnit.HOURS);
     }
 }

@@ -4,7 +4,6 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ktv.mapper.OrderMapper">
 
-    <!-- 订单基础列 -->
     <sql id="Base_Column_List">
         o.id,
         o.order_no,
@@ -23,12 +22,7 @@
         o.deleted
     </sql>
 
-    <!-- 分页查询订单列表 -->
-    <!-- BugC2修复：su1.username AS operator_name 导致列表查出的是登录名，
-         而 convertToVO 补查时用 operator.getRealName() 返回真实姓名，两者不一致。
-         统一改为 su1.real_name AS operator_name，与补查逻辑保持一致。 -->
-    <!-- S2修复：增加 LEFT JOIN su2 查询 closer_name，消除分页场景下 closerName 的 N+1 查询 -->
-    <!-- H14修复：关联 t_sys_user 时增加 deleted = 0 过滤，避免关联到已删除用户 -->
+    <!-- 分页查询订单列表，并补齐包厢名、操作人姓名、结账人姓名 -->
     <select id="selectOrderPage" resultType="com.ktv.entity.Order">
         SELECT
             <include refid="Base_Column_List"/>,
@@ -56,8 +50,7 @@
         ORDER BY o.create_time DESC
     </select>
 
-    <!-- 查询某日期当天的订单最大序号 -->
-    <!-- BugF修复：KTV(3位) + yyyyMMdd(8位) + 序号(6位)，序号从第12位开始，原来的13是错的 -->
+    <!-- 查询某一天的订单最大序号，序号从第 12 位开始截取 -->
     <select id="selectMaxSeqByDate" resultType="java.lang.Integer">
         SELECT MAX(CAST(SUBSTRING(order_no, 12, 6) AS SIGNED))
         FROM t_order
@@ -73,7 +66,7 @@
         LIMIT 1
     </select>
 
-    <!-- C-1修复：原子结账更新，只有 status=1（消费中）的订单才能被结账 -->
+    <!-- 原子结账，只允许消费中的订单更新为已结账 -->
     <update id="atomicCloseOrder">
         UPDATE t_order
         SET end_time = #{endTime},
@@ -88,7 +81,7 @@
           AND deleted = 0
     </update>
 
-    <!-- C-1修复：原子取消订单更新，只有 status=1（消费中）的订单才能被取消 -->
+    <!-- 原子取消订单，只允许消费中的订单更新为已取消 -->
     <update id="atomicCancelOrder">
         UPDATE t_order
         SET status = 3,

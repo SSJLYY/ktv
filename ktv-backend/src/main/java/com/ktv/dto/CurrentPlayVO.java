@@ -7,7 +7,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * 当前播放状态VO
+ * 当前播放状态响应。
  */
 @Data
 public class CurrentPlayVO implements Serializable {
@@ -15,48 +15,48 @@ public class CurrentPlayVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 播放状态：PLAYING（播放中）、PAUSED（已暂停）、NONE（无歌曲）
+     * 播放状态：`PLAYING`、`PAUSED`、`NONE`。
      */
     private String playStatus;
 
     /**
-     * 当前播放歌曲ID
+     * 当前播放的点歌记录 ID。
      */
     private Long orderSongId;
 
     /**
-     * 歌曲ID
+     * 歌曲 ID。
      */
     private Long songId;
 
     /**
-     * 歌曲名
+     * 歌曲名称。
      */
     private String songName;
 
     /**
-     * 歌手名
+     * 歌手名称。
      */
     private String singerName;
 
     /**
-     * 歌曲时长（秒）
+     * 歌曲时长，单位：秒。
      */
     private Integer duration;
 
     /**
-     * 歌曲文件路径
+     * 歌曲文件路径。
      */
     private String filePath;
 
     /**
-     * 播放开始时间
+     * 播放开始时间。
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime playTime;
 
     /**
-     * 队列剩余数量
+     * 等待队列剩余数量。
      */
     private Integer queueRemaining;
 }

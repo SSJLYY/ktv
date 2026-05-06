@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SongSearchServiceImpl implements SongSearchService {
 
+    private static final long MAX_PAGE_SIZE = 100L;
+
     private final SongMapper songMapper;
     private final SingerMapper singerMapper;
     private final CategoryMapper categoryMapper;
@@ -41,6 +43,7 @@ public class SongSearchServiceImpl implements SongSearchService {
         if (keyword == null || keyword.trim().isEmpty()) {
             throw new BusinessException("搜索关键词不能为空");
         }
+        validatePageParams(pageNum, pageSize);
 
         // 不转大写：原样传入，XML中分别处理歌名（精确匹配）和拼音（UPPER转换）
         // 修复：之前toUpperCase()导致中文歌名LIKE匹配失效（"月亮" != "月亮"的大写）
@@ -52,6 +55,8 @@ public class SongSearchServiceImpl implements SongSearchService {
 
     @Override
     public IPage<SongVO> getSongsBySinger(Long singerId, Long pageNum, Long pageSize) {
+        validatePositiveId(singerId, "歌手ID不能为空");
+        validatePageParams(pageNum, pageSize);
         // M23修复：移除冗余的selectById检查，直接分页查询
         // 如果歌手不存在，selectBySingerId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
@@ -60,6 +65,8 @@ public class SongSearchServiceImpl implements SongSearchService {
 
     @Override
     public IPage<SongVO> getSongsByCategory(Long categoryId, Long pageNum, Long pageSize) {
+        validatePositiveId(categoryId, "分类ID不能为空");
+        validatePageParams(pageNum, pageSize);
         // M24修复：移除冗余的selectById检查，直接分页查询
         // 如果分类不存在，selectByCategoryId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
@@ -119,5 +126,23 @@ public class SongSearchServiceImpl implements SongSearchService {
         BeanUtils.copyProperties(category, vo);
         vo.setStatusText(category.getStatusText());
         return vo;
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void validatePageParams(Long pageNum, Long pageSize) {
+        if (pageNum == null || pageNum <= 0) {
+            throw new BusinessException("分页页码必须大于0");
+        }
+        if (pageSize == null || pageSize <= 0) {
+            throw new BusinessException("分页大小必须大于0");
+        }
+        if (pageSize > MAX_PAGE_SIZE) {
+            throw new BusinessException("分页大小不能超过100");
+        }
     }
 }

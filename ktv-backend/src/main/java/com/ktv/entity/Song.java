@@ -5,11 +5,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 歌曲表
- * SQL-S3修复：继承 BaseEntity，复用 id/createTime/updateTime/deleted 公共字段
- *
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌曲实体，对应表 `t_song`。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -17,72 +13,72 @@ import lombok.EqualsAndHashCode;
 public class Song extends BaseEntity {
 
     /**
-     * 歌曲名
+     * 歌曲名称。
      */
     private String name;
 
     /**
-     * 歌手ID
+     * 歌手 ID。
      */
     private Long singerId;
 
     /**
-     * 分类ID
+     * 分类 ID。
      */
     private Long categoryId;
 
     /**
-     * 拼音全拼
+     * 拼音全拼。
      */
     private String pinyin;
 
     /**
-     * 拼音首字母（大写）
+     * 拼音首字母，大写。
      */
     private String pinyinInitial;
 
     /**
-     * 语种：国语/粤语/英语/日语/韩语/其他
+     * 语言，例如国语、粤语、英语、日语、韩语、其他。
      */
     private String language;
 
     /**
-     * 时长（秒）
+     * 时长，单位：秒。
      */
     private Integer duration;
 
     /**
-     * 歌曲文件相对路径
+     * 歌曲文件相对路径。
      */
     private String filePath;
 
     /**
-     * 封面图片URL
+     * 封面图片 URL。
      */
     private String coverUrl;
 
     /**
-     * 歌词文件路径
+     * 歌词文件路径。
      */
     private String lyricPath;
 
     /**
-     * 总点播次数
+     * 总播放次数。
      */
     private Integer playCount;
 
     /**
-     * 是否热门：0否 1是
+     * 是否热门：0 否，1 是。
      */
     private Integer isHot;
 
     /**
-     * 是否新歌：0否 1是
+     * 是否新歌：0 否，1 是。
      */
     private Integer isNew;
 
     /**
-     * 状态：0下架 1上架
+     * 状态：0 下架，1 上架。
      */
     private Integer status;
 }

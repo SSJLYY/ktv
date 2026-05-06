@@ -4,11 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 订单状态枚举
- * N6修复：替代状态码魔法数字
- *
- * @author shaun.sheng
- * @since 2026-03-31
+ * 订单状态枚举。
  */
 @Getter
 @AllArgsConstructor
@@ -21,9 +17,6 @@ public enum OrderStatusEnum {
     private final int code;
     private final String description;
 
-    /**
-     * 根据状态码获取描述
-     */
     public static String getDescription(Integer code) {
         if (code == null) {
             return "未知";

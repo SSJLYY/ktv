@@ -17,10 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 歌手Service实现
- * 
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌手服务实现。
  */
 @Service
 @RequiredArgsConstructor
@@ -37,22 +34,18 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createSinger(SingerDTO singerDTO) {
-        // 检查歌手名是否已存在
         LambdaQueryWrapper<Singer> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Singer::getName, singerDTO.getName());
         Long count = singerMapper.selectCount(queryWrapper);
-        if (count > 0) {
+        if (count != null && count > 0) {
             throw new BusinessException("歌手名已存在");
         }
 
         Singer singer = new Singer();
         BeanUtils.copyProperties(singerDTO, singer);
-
-        // 自动生成拼音（使用 PinyinUtil 统一封装）
         singer.setPinyin(PinyinUtil.getPinyin(singer.getName()));
         singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singer.getName()));
 
-        // 设置默认值
         if (singer.getGender() == null) {
             singer.setGender(0);
         }
@@ -73,10 +66,6 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
             throw new BusinessException("歌手不存在");
         }
 
-        // 检查歌手名是否与其他歌手重复
-        // BugD5修复：singerDTO.getName() 可能为 null（POST/PUT 接口 @Valid 对 Create 分组校验不覆盖 Update），
-        // 用 existSinger.getName().equals(null) 返回 false，再进 queryWrapper 会查 name=null 的歌手，属于逻辑错误。
-        // 修复：name 为 null 时保留原名，不触发重名校验和拼音更新。
         if (singerDTO.getName() == null) {
             singerDTO.setName(existSinger.getName());
         }
@@ -85,7 +74,7 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
             queryWrapper.eq(Singer::getName, singerDTO.getName());
             queryWrapper.ne(Singer::getId, id);
             Long count = singerMapper.selectCount(queryWrapper);
-            if (count > 0) {
+            if (count != null && count > 0) {
                 throw new BusinessException("歌手名已存在");
             }
         }
@@ -94,7 +83,6 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
         BeanUtils.copyProperties(singerDTO, singer);
         singer.setId(id);
 
-        // H9修复：如果修改了歌手名，更新拼音（使用singerDTO.getName()而非singer.getName()）
         if (!existSinger.getName().equals(singerDTO.getName())) {
             singer.setPinyin(PinyinUtil.getPinyin(singerDTO.getName()));
             singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singerDTO.getName()));
@@ -113,13 +101,9 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
         if (singer == null) {
             throw new BusinessException("歌手不存在");
         }
-
-        // 检查是否有歌曲
         if (singer.getSongCount() != null && singer.getSongCount() > 0) {
             throw new BusinessException("该歌手下还有歌曲，无法删除");
         }
-
-        // MyBatis-Plus逻辑删除
         return singerMapper.deleteById(id) > 0;
     }
 
