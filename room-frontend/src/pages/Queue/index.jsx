@@ -43,7 +43,6 @@ export default function Queue() {
   )
 }
 
-// ==================== 待唱列表 ====================
 function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
@@ -54,14 +53,14 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
     try {
       const res = await getQueueList(orderId, 1, 100)
       setList(res.data?.records || [])
-    } catch { /* handled */ }
+    } catch {
+      // handled
+    }
   }, [orderId])
 
-  // 初始加载 + 每10秒轮询
   useEffect(() => {
     let isMounted = true
 
-    // 先清理旧的定时器
     if (timerRef.current) {
       clearInterval(timerRef.current)
     }
@@ -86,9 +85,8 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
 
   const handleTop = async (item) => {
     if (operatingId) return
-    // F-N2修复：避免变量名 confirm 覆盖全局 Dialog.confirm，改为 confirmed
     const confirmed = await Dialog.confirm({
-      content: `确定将「${item.songName}」置顶为下一首？`,
+      content: `确定将《${item.songName}》置顶为下一首？`,
     })
     if (!confirmed) return
 
@@ -98,15 +96,17 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
       Toast.show({ content: '已置顶', icon: 'success' })
       bumpQueueVersion()
       fetchQueue()
-    } catch { /* handled */ }
-    finally { setOperatingId(null) }
+    } catch {
+      // handled
+    } finally {
+      setOperatingId(null)
+    }
   }
 
   const handleRemove = async (item) => {
     if (operatingId) return
-    // F-N2修复：避免变量名 confirm 覆盖全局 Dialog.confirm，改为 confirmed
     const confirmed = await Dialog.confirm({
-      content: `确定取消「${item.songName}」？`,
+      content: `确定取消《${item.songName}》？`,
     })
     if (!confirmed) return
 
@@ -116,12 +116,15 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
       Toast.show({ content: '已取消', icon: 'success' })
       bumpQueueVersion()
       fetchQueue()
-    } catch { /* handled */ }
-    finally { setOperatingId(null) }
+    } catch {
+      // handled
+    } finally {
+      setOperatingId(null)
+    }
   }
 
   if (loading) return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
-  if (list.length === 0) return <div className="empty-text">还没有点歌，快去搜索吧 🎤</div>
+  if (list.length === 0) return <div className="empty-text">还没有点歌，快去搜索吧 🎵</div>
 
   return (
     <div className="queue-list">
@@ -181,7 +184,6 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   )
 }
 
-// ==================== 已唱列表 ====================
 function PlayedList({ orderId }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
