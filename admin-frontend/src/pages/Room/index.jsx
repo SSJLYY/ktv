@@ -21,8 +21,11 @@ import {
   deleteRoom,
   updateRoomStatus,
 } from '../../api/room'
+import { useUserStore } from '../../store/userStore'
 
 const Room = () => {
+  const userInfo = useUserStore((state) => state.userInfo)
+  const isSuperAdmin = userInfo?.role === 'super_admin'
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   // BugA1修复：后端 RoomController.getRoomList 返回 List<RoomVO>（非分页），无需 total/pageNum/pageSize
@@ -231,33 +234,39 @@ const Room = () => {
       width: 260,
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            onClick={() => handleChangeStatus(record)}
-          >
-            修改状态
-          </Button>
-          <Popconfirm
-            title="确定删除该包厢吗?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
+          {isSuperAdmin && (
             <Button
               type="link"
-              danger
-              icon={<DeleteOutlined />}
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
             >
-              删除
+              编辑
             </Button>
-          </Popconfirm>
+          )}
+          {isSuperAdmin && (
+            <Button
+              type="link"
+              onClick={() => handleChangeStatus(record)}
+            >
+              修改状态
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Popconfirm
+              title="确定删除该包厢吗?"
+              onConfirm={() => handleDelete(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -294,11 +303,13 @@ const Room = () => {
       </div>
 
       {/* 操作按钮 */}
-      <div style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          新增包厢
-        </Button>
-      </div>
+      {isSuperAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新增包厢
+          </Button>
+        </div>
+      )}
 
       {/* 表格 */}
       {/* BugA1修复：后端返回 List（非分页），不使用分页组件；数据量通常不大，直接展示全部 */}

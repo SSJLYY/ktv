@@ -3,6 +3,7 @@ package com.ktv.controller.admin;
 import com.ktv.common.result.Result;
 import com.ktv.dto.RoomDTO;
 import com.ktv.service.RoomService;
+import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.RoomVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -70,7 +71,10 @@ public class RoomController {
      * @return 包厢ID
      */
     @PostMapping
-    public Result<Long> createRoom(@Valid @RequestBody RoomDTO roomDTO) {
+    public Result<Long> createRoom(@Valid @RequestBody RoomDTO roomDTO,
+                                   @RequestAttribute(name = "userId", required = false) Long userId,
+                                   @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = roomService.createRoom(roomDTO);
         return Result.success(id);
     }
@@ -84,7 +88,10 @@ public class RoomController {
      */
     @PutMapping("/{id}")
     public Result<Boolean> updateRoom(@PathVariable Long id,
-                                      @Valid @RequestBody RoomDTO roomDTO) {
+                                      @Valid @RequestBody RoomDTO roomDTO,
+                                      @RequestAttribute(name = "userId", required = false) Long userId,
+                                      @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.updateRoom(id, roomDTO);
         return Result.success(success);
     }
@@ -96,7 +103,10 @@ public class RoomController {
      * @return 是否成功
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteRoom(@PathVariable Long id) {
+    public Result<Boolean> deleteRoom(@PathVariable Long id,
+                                      @RequestAttribute(name = "userId", required = false) Long userId,
+                                      @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.deleteRoom(id);
         return Result.success(success);
     }
@@ -110,7 +120,10 @@ public class RoomController {
      */
     @PutMapping("/{id}/status")
     public Result<Boolean> updateRoomStatus(@PathVariable Long id,
-                                            @RequestParam Integer status) {
+                                            @RequestParam Integer status,
+                                            @RequestAttribute(name = "userId", required = false) Long userId,
+                                            @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.updateRoomStatus(id, status);
         return Result.success(success);
     }

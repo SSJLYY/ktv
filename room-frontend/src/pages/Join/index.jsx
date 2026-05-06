@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Input, Button, Toast } from 'antd-mobile'
 import useRoomStore from '../../store/roomStore'
@@ -13,23 +13,12 @@ export default function Join() {
   const setOrderId = useRoomStore((s) => s.setOrderId)
   const [orderIdInput, setOrderIdInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [quickJoinCooldown, setQuickJoinCooldown] = useState(false)
-  const quickJoinTimerRef = useRef(null)
 
   useEffect(() => {
     if (hasHydrated && orderId) {
       navigate('/search', { replace: true })
     }
   }, [hasHydrated, orderId, navigate])
-
-  useEffect(() => {
-    return () => {
-      if (quickJoinTimerRef.current) {
-        clearTimeout(quickJoinTimerRef.current)
-        quickJoinTimerRef.current = null
-      }
-    }
-  }, [])
 
   const handleJoin = async () => {
     const parsedOrderId = parseInt(orderIdInput.trim(), 10)
@@ -61,44 +50,11 @@ export default function Join() {
     }
   }
 
-  const handleQuickJoin = async () => {
-    if (!isDev) {
-      return
-    }
-    if (quickJoinCooldown) {
-      Toast.show({ content: '请稍后再试', icon: 'fail' })
-      return
-    }
-
-    setQuickJoinCooldown(true)
-    if (quickJoinTimerRef.current) {
-      clearTimeout(quickJoinTimerRef.current)
-    }
-    quickJoinTimerRef.current = setTimeout(() => {
-      setQuickJoinCooldown(false)
-      quickJoinTimerRef.current = null
-    }, 60000)
-
-    try {
-      const res = await request.get('/api/room/orders/1')
-      const order = res.data
-      if (order && order.status === 1) {
-        setOrderId(order.id)
-        Toast.show({ content: `已加入包厢 ${order.roomName || '未知'}`, icon: 'success' })
-        navigate('/search', { replace: true })
-      } else {
-        Toast.show({ content: '订单ID=1不在进行中，请手动输入订单号', icon: 'fail' })
-      }
-    } catch {
-      Toast.show({ content: '请手动输入订单号', icon: 'fail' })
-    }
-  }
-
   return (
     <div className="join-page">
       <div className="join-header">
-        <h1>🎵 KTV 点歌</h1>
-        <p>输入订单号加入包厢开始点歌</p>
+        <h1>🎤 KTV 点歌</h1>
+        <p>输入订单号加入包厢，开始点歌</p>
       </div>
       <div className="join-form">
         <Input
@@ -123,17 +79,11 @@ export default function Join() {
         >
           加入包厢
         </Button>
-        {isDev && (
-          <Button
-            block
-            fill="outline"
-            size="large"
-            onClick={handleQuickJoin}
-            style={{ '--height': '48px', marginTop: '12px' }}
-          >
-            快速加入（开发模式）
-          </Button>
-        )}
+        {isDev ? (
+          <div style={{ marginTop: '12px', color: '#999', fontSize: '13px', textAlign: 'center' }}>
+            开发模式下也需要输入真实订单号，避免误连到错误包厢。
+          </div>
+        ) : null}
       </div>
     </div>
   )

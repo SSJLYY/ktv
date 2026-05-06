@@ -9,6 +9,7 @@ import com.ktv.entity.Song;
 import com.ktv.mapper.SongMapper;
 import com.ktv.security.FileSecurityChecker;
 import com.ktv.service.SongService;
+import com.ktv.util.AdminAccessUtils;
 import com.ktv.util.MediaUtils;
 import com.ktv.vo.SongVO;
 import jakarta.validation.Valid;
@@ -107,7 +108,10 @@ public class SongController {
      * @return 歌曲ID
      */
     @PostMapping
-    public Result<Long> createSong(@Valid @RequestBody SongDTO songDTO) {
+    public Result<Long> createSong(@Valid @RequestBody SongDTO songDTO,
+                                   @RequestAttribute(name = "userId", required = false) Long userId,
+                                   @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = songService.createSong(songDTO);
         return Result.success(id);
     }
@@ -133,7 +137,10 @@ public class SongController {
      */
     @PutMapping("/{id}")
     public Result<Boolean> updateSong(@PathVariable Long id,
-                                      @Valid @RequestBody SongDTO songDTO) {
+                                      @Valid @RequestBody SongDTO songDTO,
+                                      @RequestAttribute(name = "userId", required = false) Long userId,
+                                      @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = songService.updateSong(id, songDTO);
         return Result.success(success);
     }
@@ -145,7 +152,10 @@ public class SongController {
      * @return 是否成功
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteSong(@PathVariable Long id) {
+    public Result<Boolean> deleteSong(@PathVariable Long id,
+                                      @RequestAttribute(name = "userId", required = false) Long userId,
+                                      @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = songService.deleteSong(id);
         return Result.success(success);
     }
@@ -161,7 +171,11 @@ public class SongController {
     @PostMapping("/{songId}/upload")
     public Result<UploadResult> uploadMediaFile(
             @PathVariable Long songId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
+
+        AdminAccessUtils.requireSuperAdmin(userId, role);
 
         log.info("上传文件请求：songId={}, fileName={}", songId, file.getOriginalFilename());
 
@@ -292,7 +306,11 @@ public class SongController {
     @PostMapping("/{songId}/cover")
     public Result<UploadResult> uploadCoverImage(
             @PathVariable Long songId,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
+
+        AdminAccessUtils.requireSuperAdmin(userId, role);
 
         log.info("上传封面图请求：songId={}, fileName={}", songId, file.getOriginalFilename());
 

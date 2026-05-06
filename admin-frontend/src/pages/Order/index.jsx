@@ -21,10 +21,13 @@ import {
   cancelOrder,
 } from '../../api/order'
 import { getAvailableRooms } from '../../api/room'
+import { useUserStore } from '../../store/userStore'
 
 const { RangePicker } = DatePicker
 
 const Order = () => {
+  const userInfo = useUserStore((state) => state.userInfo)
+  const isSuperAdmin = userInfo?.role === 'super_admin'
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   const [total, setTotal] = useState(0)
@@ -286,21 +289,25 @@ const Order = () => {
           </Button>
           {record.status === 1 && (
             <>
-              <Button
-                type="link"
-                style={{ color: '#52c41a' }}
-                icon={<CheckOutlined />}
-                onClick={() => handleCloseOrder(record.id)}
-              >
-                结账
-              </Button>
-              <Button
-                type="link"
-                danger
-                onClick={() => handleCancelOrder(record.id)}
-              >
-                取消
-              </Button>
+              {isSuperAdmin && (
+                <Button
+                  type="link"
+                  style={{ color: '#52c41a' }}
+                  icon={<CheckOutlined />}
+                  onClick={() => handleCloseOrder(record.id)}
+                >
+                  结账
+                </Button>
+              )}
+              {isSuperAdmin && (
+                <Button
+                  type="link"
+                  danger
+                  onClick={() => handleCancelOrder(record.id)}
+                >
+                  取消
+                </Button>
+              )}
             </>
           )}
         </Space>
@@ -335,11 +342,13 @@ const Order = () => {
       </div>
 
       {/* 操作按钮 */}
-      <div style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenOrder}>
-          开台
-        </Button>
-      </div>
+      {isSuperAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenOrder}>
+            开台
+          </Button>
+        </div>
+      )}
 
       {/* 表格 */}
       <Table
@@ -441,9 +450,8 @@ const Order = () => {
             <Descriptions.Item label="操作员">
               {currentOrder.operatorName || '-'}
             </Descriptions.Item>
-            {/* BugC3修复：详情弹窗遗漏了结账操作员（closerName），OrderVO 有此字段 */}
-            {currentOrder.status === 2 && (
-              <Descriptions.Item label="结账操作员">
+            {(currentOrder.status === 2 || currentOrder.status === 3) && (
+              <Descriptions.Item label={currentOrder.status === 2 ? '结账操作员' : '取消操作员'}>
                 {currentOrder.closerName || '-'}
               </Descriptions.Item>
             )}

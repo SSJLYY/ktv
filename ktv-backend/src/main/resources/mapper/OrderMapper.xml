@@ -81,10 +81,13 @@
           AND deleted = 0
     </update>
 
-    <!-- 原子取消订单，只允许消费中的订单更新为已取消 -->
+    <!-- 原子取消订单，只允许消费中的订单更新为已取消，并记录取消时的审计信息 -->
     <update id="atomicCancelOrder">
         UPDATE t_order
-        SET status = 3,
+        SET end_time = #{endTime},
+            duration_minutes = #{durationMinutes},
+            closer_id = #{closerId},
+            status = 3,
             update_time = NOW()
         WHERE id = #{orderId}
           AND status = 1

@@ -8,7 +8,9 @@ import com.ktv.common.enums.RoomStatusEnum;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.RoomDTO;
+import com.ktv.entity.Order;
 import com.ktv.entity.Room;
+import com.ktv.mapper.OrderMapper;
 import com.ktv.mapper.RoomMapper;
 import com.ktv.service.RoomService;
 import com.ktv.vo.RoomVO;
@@ -37,6 +39,7 @@ import java.util.stream.Collectors;
 public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements RoomService {
 
     private final RoomMapper roomMapper;
+    private final OrderMapper orderMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -114,7 +117,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     public Boolean deleteRoom(Long id) {
         Room existRoom = loadRoom(id);
         if (existRoom.getStatus() == null || existRoom.getStatus() != RoomStatusEnum.AVAILABLE.getCode()) {
-            throw new BusinessException("仅允许删除状态为\"空闲\"的包厢");
+            throw new BusinessException("仅允许删除状态为空闲的包厢");
         }
 
         boolean deleted = roomMapper.deleteById(id) > 0;
@@ -131,14 +134,25 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (status == null
                 || status < RoomStatusEnum.AVAILABLE.getCode()
                 || status > RoomStatusEnum.MAINTENANCE.getCode()) {
-            throw new BusinessException("无效的状态值");
+            throw new BusinessException("无效的包厢状态");
+        }
+        if (Objects.equals(existRoom.getStatus(), status)) {
+            return true;
+        }
+
+        Order activeOrder = orderMapper.selectActiveOrderByRoomId(id);
+        if (activeOrder != null && status != RoomStatusEnum.IN_USE.getCode()) {
+            throw new BusinessException("该包厢存在进行中的订单，不能改为非使用中状态");
+        }
+        if (activeOrder == null && status == RoomStatusEnum.IN_USE.getCode()) {
+            throw new BusinessException("该包厢没有进行中的订单，不能直接改为使用中");
         }
 
         Room room = new Room();
         room.setId(id);
         room.setStatus(status);
         boolean updated = roomMapper.updateById(room) > 0;
-        if (updated && !Objects.equals(existRoom.getStatus(), status)) {
+        if (updated) {
             registerAfterCommit(() -> syncRoomStatusToRedis(loadRoom(id)));
         }
         return updated;

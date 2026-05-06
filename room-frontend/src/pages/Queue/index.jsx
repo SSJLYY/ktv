@@ -86,7 +86,7 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   const handleTop = async (item) => {
     if (operatingId) return
     const confirmed = await Dialog.confirm({
-      content: `确定将《${item.songName}》置顶为下一首？`,
+      content: `确定将《${item.songName}》置顶为下一首吗？`,
     })
     if (!confirmed) return
 
@@ -106,7 +106,7 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   const handleRemove = async (item) => {
     if (operatingId) return
     const confirmed = await Dialog.confirm({
-      content: `确定取消《${item.songName}》？`,
+      content: `确定取消《${item.songName}》吗？`,
     })
     if (!confirmed) return
 
@@ -124,7 +124,7 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   }
 
   if (loading) return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
-  if (list.length === 0) return <div className="empty-text">还没有点歌，快去搜索吧 🎵</div>
+  if (list.length === 0) return <div className="empty-text">还没有点歌，快去搜索吧 🎤</div>
 
   return (
     <div className="queue-list">

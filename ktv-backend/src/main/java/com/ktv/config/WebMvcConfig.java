@@ -25,7 +25,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/admin/**")  // 拦截所有admin接口
                 .excludePathPatterns(
                         "/api/admin/login",        // 排除登录接口
-                        "/api/admin/logout",       // 排除登出接口
                         "/api/health",             // 排除健康检查接口
                         "/test/**"                 // N2修复：排除测试接口（仅dev环境生效，配合@Profile("dev")）
                 );

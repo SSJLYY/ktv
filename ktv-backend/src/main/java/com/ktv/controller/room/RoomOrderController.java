@@ -29,6 +29,10 @@ public class RoomOrderController {
     @GetMapping("/{orderId}")
     @RateLimit(maxRequests = 10, windowSeconds = 60, message = "请求过于频繁，请稍后再试")
     public Result<OrderBasicVO> getOrderInfo(@PathVariable Long orderId, HttpServletRequest request) {
+        if (orderId == null || orderId <= 0) {
+            throw new BusinessException("订单ID必须为正整数");
+        }
+
         String clientIp = ClientIpUtils.getClientIp(request);
         log.info("包厢端查询订单: orderId={}, ip={}", orderId, clientIp);
 

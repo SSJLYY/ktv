@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ktv.common.result.Result;
 import com.ktv.dto.SingerDTO;
 import com.ktv.service.SingerService;
+import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.SingerVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -52,7 +53,10 @@ public class SingerController {
      * @return 歌手ID
      */
     @PostMapping
-    public Result<Long> createSinger(@Valid @RequestBody SingerDTO singerDTO) {
+    public Result<Long> createSinger(@Valid @RequestBody SingerDTO singerDTO,
+                                     @RequestAttribute(name = "userId", required = false) Long userId,
+                                     @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = singerService.createSinger(singerDTO);
         return Result.success(id);
     }
@@ -78,7 +82,10 @@ public class SingerController {
      */
     @PutMapping("/{id}")
     public Result<Boolean> updateSinger(@PathVariable Long id,
-                                        @Valid @RequestBody SingerDTO singerDTO) {
+                                        @Valid @RequestBody SingerDTO singerDTO,
+                                        @RequestAttribute(name = "userId", required = false) Long userId,
+                                        @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = singerService.updateSinger(id, singerDTO);
         return Result.success(success);
     }
@@ -90,7 +97,10 @@ public class SingerController {
      * @return 是否成功
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteSinger(@PathVariable Long id) {
+    public Result<Boolean> deleteSinger(@PathVariable Long id,
+                                        @RequestAttribute(name = "userId", required = false) Long userId,
+                                        @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = singerService.deleteSinger(id);
         return Result.success(success);
     }

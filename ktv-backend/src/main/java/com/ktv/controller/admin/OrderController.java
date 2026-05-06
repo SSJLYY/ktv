@@ -26,6 +26,8 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class OrderController {
 
+    private static final long MAX_PAGE_SIZE = 100L;
+
     private final OrderService orderService;
 
     /**
@@ -54,6 +56,7 @@ public class OrderController {
             @PathVariable("id") Long orderId,
             @RequestAttribute(name = "userId", required = false) Long userId
     ) {
+        validatePositiveId(orderId, "订单ID必须为正数");
         // S12修复：强制校验 userId
         if (userId == null) {
             throw new BusinessException("用户未登录，无法执行此操作");
@@ -75,6 +78,16 @@ public class OrderController {
             @RequestParam(required = false) Long roomId,
             @RequestParam(required = false) Integer status
     ) {
+        validatePageParams(current, size);
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new BusinessException("开始时间不能晚于结束时间");
+        }
+        if (roomId != null) {
+            validatePositiveId(roomId, "包厢ID必须为正数");
+        }
+        if (status != null && (status < 1 || status > 3)) {
+            throw new BusinessException("订单状态参数无效");
+        }
         Page<Order> page = new Page<>(current, size);
         IPage<OrderVO> result = orderService.getOrderPage(page, startDate, endDate, roomId, status);
         return Result.success(result);
@@ -86,6 +99,7 @@ public class OrderController {
      */
     @GetMapping("/{id}")
     public Result<OrderVO> getOrderById(@PathVariable("id") Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正数");
         OrderVO orderVO = orderService.getOrderById(orderId);
         return Result.success(orderVO);
     }
@@ -95,8 +109,13 @@ public class OrderController {
      * DELETE /api/admin/orders/{id}
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> cancelOrder(@PathVariable("id") Long orderId) {
-        Boolean result = orderService.cancelOrder(orderId);
+    public Result<Boolean> cancelOrder(@PathVariable("id") Long orderId,
+                                       @RequestAttribute(name = "userId", required = false) Long userId) {
+        validatePositiveId(orderId, "订单ID必须为正数");
+        if (userId == null) {
+            throw new BusinessException("用户未登录，无法执行此操作");
+        }
+        Boolean result = orderService.cancelOrder(orderId, userId);
         return Result.success(result);
     }
 
@@ -106,7 +125,26 @@ public class OrderController {
      */
     @GetMapping("/room/{roomId}/active")
     public Result<OrderVO> getActiveOrderByRoomId(@PathVariable("roomId") Long roomId) {
+        validatePositiveId(roomId, "包厢ID必须为正数");
         OrderVO orderVO = orderService.getActiveOrderByRoomId(roomId);
         return Result.success(orderVO);
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void validatePageParams(Long current, Long size) {
+        if (current == null || current <= 0) {
+            throw new BusinessException("页码必须大于0");
+        }
+        if (size == null || size <= 0) {
+            throw new BusinessException("每页数量必须大于0");
+        }
+        if (size > MAX_PAGE_SIZE) {
+            throw new BusinessException("每页数量不能超过100");
+        }
     }
 }

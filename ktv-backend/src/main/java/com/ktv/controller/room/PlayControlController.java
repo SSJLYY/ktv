@@ -1,5 +1,6 @@
 package com.ktv.controller.room;
 
+import com.ktv.common.exception.BusinessException;
 import com.ktv.common.result.Result;
 import com.ktv.dto.CurrentPlayVO;
 import com.ktv.service.PlayControlService;
@@ -24,6 +25,7 @@ public class PlayControlController {
     @Operation(summary = "切歌", description = "将当前歌曲标记为已播放，并切到队列中的下一首")
     @PostMapping("/next")
     public Result<Void> next(@Parameter(description = "订单ID") @PathVariable Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正整数");
         playControlService.next(orderId);
         return Result.success();
     }
@@ -31,6 +33,7 @@ public class PlayControlController {
     @Operation(summary = "重唱", description = "重新播放当前歌曲，不切换队列")
     @PostMapping("/replay")
     public Result<Void> replay(@Parameter(description = "订单ID") @PathVariable Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正整数");
         playControlService.replay(orderId);
         return Result.success();
     }
@@ -38,6 +41,7 @@ public class PlayControlController {
     @Operation(summary = "暂停播放", description = "将当前播放状态更新为暂停")
     @PostMapping("/pause")
     public Result<Void> pause(@Parameter(description = "订单ID") @PathVariable Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正整数");
         playControlService.pause(orderId);
         return Result.success();
     }
@@ -45,6 +49,7 @@ public class PlayControlController {
     @Operation(summary = "继续播放", description = "将当前播放状态更新为播放中")
     @PostMapping("/resume")
     public Result<Void> resume(@Parameter(description = "订单ID") @PathVariable Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正整数");
         playControlService.resume(orderId);
         return Result.success();
     }
@@ -53,7 +58,14 @@ public class PlayControlController {
     @GetMapping("/current")
     public Result<CurrentPlayVO> getCurrentPlayStatus(
             @Parameter(description = "订单ID") @PathVariable Long orderId) {
+        validatePositiveId(orderId, "订单ID必须为正整数");
         CurrentPlayVO vo = playControlService.getCurrentPlayStatus(orderId);
         return Result.success(vo);
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
     }
 }

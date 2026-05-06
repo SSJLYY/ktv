@@ -3,6 +3,7 @@ package com.ktv.controller.admin;
 import com.ktv.common.result.Result;
 import com.ktv.dto.CategoryDTO;
 import com.ktv.service.CategoryService;
+import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.CategoryVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +68,10 @@ public class CategoryController {
      * @return 分类ID
      */
     @PostMapping
-    public Result<Long> createCategory(@Valid @RequestBody CategoryDTO categoryDTO) {
+    public Result<Long> createCategory(@Valid @RequestBody CategoryDTO categoryDTO,
+                                       @RequestAttribute(name = "userId", required = false) Long userId,
+                                       @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = categoryService.createCategory(categoryDTO);
         return Result.success(id);
     }
@@ -81,7 +85,10 @@ public class CategoryController {
      */
     @PutMapping("/{id}")
     public Result<Boolean> updateCategory(@PathVariable Long id,
-                                          @Valid @RequestBody CategoryDTO categoryDTO) {
+                                          @Valid @RequestBody CategoryDTO categoryDTO,
+                                          @RequestAttribute(name = "userId", required = false) Long userId,
+                                          @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = categoryService.updateCategory(id, categoryDTO);
         return Result.success(success);
     }
@@ -93,7 +100,10 @@ public class CategoryController {
      * @return 是否成功
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteCategory(@PathVariable Long id) {
+    public Result<Boolean> deleteCategory(@PathVariable Long id,
+                                          @RequestAttribute(name = "userId", required = false) Long userId,
+                                          @RequestAttribute(name = "role", required = false) String role) {
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = categoryService.deleteCategory(id);
         return Result.success(success);
     }

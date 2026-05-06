@@ -37,6 +37,7 @@ import {
 } from '../../api/song'
 import { getAllCategories } from '../../api/category'
 import { getSingerList } from '../../api/singer'
+import { useUserStore } from '../../store/userStore'
 
 // 允许上传的文件类型
 const AUDIO_TYPES = ['mp3', 'flac', 'wav', 'ogg', 'm4a']
@@ -70,6 +71,8 @@ const getAudioDuration = (file) => {
 }
 
 const Song = () => {
+  const userInfo = useUserStore((state) => state.userInfo)
+  const isSuperAdmin = userInfo?.role === 'super_admin'
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   const [total, setTotal] = useState(0)
@@ -397,34 +400,40 @@ const Song = () => {
       width: 220,
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            icon={<UploadOutlined />}
-            onClick={() => openUploadModal(record)}
-          >
-            上传
-          </Button>
-          <Popconfirm
-            title="确定删除该歌曲吗?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
+          {isSuperAdmin && (
             <Button
               type="link"
-              danger
-              icon={<DeleteOutlined />}
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
             >
-              删除
+              编辑
             </Button>
-          </Popconfirm>
+          )}
+          {isSuperAdmin && (
+            <Button
+              type="link"
+              icon={<UploadOutlined />}
+              onClick={() => openUploadModal(record)}
+            >
+              上传
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Popconfirm
+              title="确定删除该歌曲吗?"
+              onConfirm={() => handleDelete(record.id)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -506,11 +515,13 @@ const Song = () => {
       </div>
 
       {/* 操作按钮 */}
-      <div style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          新增歌曲
-        </Button>
-      </div>
+      {isSuperAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新增歌曲
+          </Button>
+        </div>
+      )}
 
       {/* 表格 */}
       <Table

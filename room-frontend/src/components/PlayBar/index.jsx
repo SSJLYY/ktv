@@ -51,7 +51,7 @@ export default function PlayBar({ onVideoPlay }) {
       console.warn('获取播放状态失败', err)
       if (!isRetry && retryCountRef.current < MAX_RETRY_COUNT) {
         retryCountRef.current++
-        console.log(`将在 ${RETRY_DELAY_MS / 1000}s 后重试获取播放状态（第${retryCountRef.current}次）`)
+        console.log(`将在 ${RETRY_DELAY_MS / 1000}s 后重试获取播放状态（第 ${retryCountRef.current} 次）`)
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
         retryTimerRef.current = setTimeout(() => {
           fetchPlayStatus(true)
@@ -254,7 +254,7 @@ export default function PlayBar({ onVideoPlay }) {
     setOperating(true)
     try {
       await replaySong(orderId)
-      Toast.show({ content: '重唱中', icon: 'success' })
+      Toast.show({ content: '已重唱', icon: 'success' })
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
       }
@@ -282,7 +282,7 @@ export default function PlayBar({ onVideoPlay }) {
     <div className="play-bar">
       {!hasSong ? (
         <div className="play-bar-empty">
-          <span>🎵</span>
+          <span>🎤</span>
           <span>暂无歌曲，快去点歌吧</span>
         </div>
       ) : (
@@ -298,7 +298,7 @@ export default function PlayBar({ onVideoPlay }) {
               <div className="play-singer-name">
                 {playInfo.singerName}
                 {playInfo.queueRemaining > 0 && (
-                  <span className="queue-count"> · 待唱{playInfo.queueRemaining}首</span>
+                  <span className="queue-count"> · 待唱 {playInfo.queueRemaining} 首</span>
                 )}
               </div>
             </div>

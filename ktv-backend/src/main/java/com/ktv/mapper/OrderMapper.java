@@ -77,7 +77,15 @@ public interface OrderMapper extends BaseMapper<Order> {
      * C-1修复：原子取消订单更新，只有 status=1（消费中）的订单才能被取消
      *
      * @param orderId 订单ID
+     * @param endTime 取消时间
+     * @param durationMinutes 已消费时长（分钟）
+     * @param closerId 取消操作员ID
      * @return 影响行数（1=成功，0=状态已变更）
      */
-    int atomicCancelOrder(@Param("orderId") Long orderId);
+    int atomicCancelOrder(
+            @Param("orderId") Long orderId,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("durationMinutes") Integer durationMinutes,
+            @Param("closerId") Long closerId
+    );
 }

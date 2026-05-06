@@ -360,6 +360,8 @@ jwt:
 
 ## 文档
 
+- **[项目协作与上手总览](skills/project-overview-quickstart.md)** - 新接手项目时优先阅读，包含全局结构、启动顺序、关键约定与版本差异说明
+- **[skills 文档索引](skills/README.md)** - 协作指南与项目技能总入口
 - **[项目概览](docs/project-overview.md)** - 系统架构、技术选型、数据库设计
 - **[API参考](docs/api-reference.md)** - 详细接口文档
 - **[代码审查规范](docs/code-review-standards.md)** - 代码质量标准

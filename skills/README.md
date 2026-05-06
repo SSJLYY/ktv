@@ -4,6 +4,7 @@
 
 ## 快速导航
 
+- [⭐ 项目总览与快速上手](project-overview-quickstart.md)
 - [📚 项目概览](#项目概览)
 - [🏗️ 技术架构](#技术架构)
 - [📁 目录结构](#目录结构)
@@ -154,22 +155,15 @@ room-frontend/src/
 
 ## 📖 文档索引
 
-### 快速上手
-1. **[后端快速上手指南](backend-quickstart.md)** - 后端环境搭建、项目启动、开发流程
-2. **[前端快速上手指南](frontend-quickstart.md)** - 前端环境搭建、项目启动、开发流程
-
-### 开发文档
-3. **[API 接口参考](api-reference.md)** - 所有 API 接口详细说明、请求参数、响应格式
-4. **[数据库设计文档](database-schema.md)** - 数据库表结构、字段说明、索引设计
-
-### 规范文档
-5. **[编码规范](coding-standards.md)** - 命名规范、代码结构、注释规范、Git 提交规范
-
-### 运维文档
-6. **[部署指南](deployment-guide.md)** - 生产环境部署、Nginx 配置、HTTPS 配置、监控与备份
-
-### 故障排查
-7. **[常见问题排查指南](troubleshooting.md)** - 常见问题及解决方案、调试技巧
+### 推荐阅读顺序
+1. **[项目总览与快速上手](project-overview-quickstart.md)** - 先建立项目全局认知、启动顺序、关键约定与真实版本判断
+2. **[后端快速上手指南](backend-quickstart.md)** - 后端环境搭建、项目启动、开发流程
+3. **[前端快速上手指南](frontend-quickstart.md)** - 前端环境搭建、项目启动、开发流程
+4. **[API 接口参考](api-reference.md)** - 所有 API 接口详细说明、请求参数、响应格式
+5. **[数据库设计文档](database-schema.md)** - 数据库表结构、字段说明、索引设计
+6. **[编码规范](coding-standards.md)** - 命名规范、代码结构、注释规范、Git 提交规范
+7. **[部署指南](deployment-guide.md)** - 生产环境部署、Nginx 配置、HTTPS 配置、监控与备份
+8. **[常见问题排查指南](troubleshooting.md)** - 常见问题及解决方案、调试技巧
 
 ---
 

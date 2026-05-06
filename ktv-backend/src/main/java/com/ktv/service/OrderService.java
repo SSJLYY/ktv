@@ -66,9 +66,10 @@ public interface OrderService extends IService<Order> {
      * 取消订单
      *
      * @param orderId 订单ID
+     * @param cancellerId 取消操作员ID
      * @return 是否成功
      */
-    Boolean cancelOrder(Long orderId);
+    Boolean cancelOrder(Long orderId, Long cancellerId);
 
     /**
      * 获取包厢当前进行中的订单

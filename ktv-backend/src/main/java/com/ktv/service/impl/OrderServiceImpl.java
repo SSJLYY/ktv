@@ -137,7 +137,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean cancelOrder(Long orderId) {
+    public Boolean cancelOrder(Long orderId, Long cancellerId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
             throw new BusinessException("订单不存在");
@@ -146,14 +146,20 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("只有进行中的订单才能取消");
         }
 
-        int updated = orderMapper.atomicCancelOrder(orderId);
+        LocalDateTime endTime = LocalDateTime.now();
+        long minutes = Duration.between(order.getStartTime(), endTime).toMinutes();
+        if (minutes < 1) {
+            minutes = 1;
+        }
+
+        int updated = orderMapper.atomicCancelOrder(orderId, endTime, (int) minutes, cancellerId);
         if (updated > 0) {
             roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.AVAILABLE.getCode());
             registerAfterCommit(() -> {
                 redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
                 clearPlaybackKeys(orderId);
             });
-            log.info("订单已取消: orderNo={}", order.getOrderNo());
+            log.info("订单已取消: orderNo={}, durationMinutes={}, cancellerId={}", order.getOrderNo(), minutes, cancellerId);
         }
         return updated > 0;
     }

@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,7 +34,10 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Result<Void> logout() {
+    public Result<Void> logout(@RequestAttribute(name = "userId", required = false) Long userId) {
+        if (userId == null) {
+            return Result.fail("用户未登录");
+        }
         return Result.success();
     }
 }

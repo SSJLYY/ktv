@@ -102,7 +102,7 @@ export default function VideoPlayer({ playInfo, onClose }) {
     setOperating(true)
     try {
       await replaySong(orderId)
-      Toast.show({ content: '重唱中', icon: 'success' })
+      Toast.show({ content: '已重唱', icon: 'success' })
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
       }
