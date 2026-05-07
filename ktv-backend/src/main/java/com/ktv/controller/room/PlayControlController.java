@@ -56,8 +56,7 @@ public class PlayControlController {
 
     @Operation(summary = "查询当前播放状态", description = "返回当前播放歌曲信息和剩余待唱数量")
     @GetMapping("/current")
-    public Result<CurrentPlayVO> getCurrentPlayStatus(
-            @Parameter(description = "订单 ID") @PathVariable Long orderId) {
+    public Result<CurrentPlayVO> getCurrentPlayStatus(@Parameter(description = "订单 ID") @PathVariable Long orderId) {
         validatePositiveId(orderId, "订单 ID 必须为正整数");
         CurrentPlayVO vo = playControlService.getCurrentPlayStatus(orderId);
         return Result.success(vo);

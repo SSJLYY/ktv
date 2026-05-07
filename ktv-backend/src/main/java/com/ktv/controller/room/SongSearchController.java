@@ -38,7 +38,7 @@ public class SongSearchController {
             @RequestParam(defaultValue = "20") Long size
     ) {
         if (keyword == null || keyword.trim().isEmpty()) {
-            throw new BusinessException("搜索关键词不能为空");
+            throw new BusinessException("搜索关键字不能为空");
         }
         validatePageParams(current, size);
         IPage<SongVO> result = songSearchService.searchSongs(keyword, current, size);
@@ -79,9 +79,7 @@ public class SongSearchController {
      * 获取所有歌手列表。
      */
     @GetMapping("/singers")
-    public Result<List<SingerVO>> getAllSingers(
-            @RequestParam(required = false) String pinyinInitial
-    ) {
+    public Result<List<SingerVO>> getAllSingers(@RequestParam(required = false) String pinyinInitial) {
         List<SingerVO> result = songSearchService.getAllSingers(pinyinInitial);
         return Result.success(result);
     }

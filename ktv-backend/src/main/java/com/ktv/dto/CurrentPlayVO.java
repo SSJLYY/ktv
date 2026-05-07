@@ -15,7 +15,7 @@ public class CurrentPlayVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 播放状态：`PLAYING`、`PAUSED`、`NONE`。
+     * 播放状态：PLAYING、PAUSED、NONE。
      */
     private String playStatus;
 
@@ -40,7 +40,7 @@ public class CurrentPlayVO implements Serializable {
     private String singerName;
 
     /**
-     * 歌曲时长，单位：秒。
+     * 歌曲时长，单位秒。
      */
     private Integer duration;
 

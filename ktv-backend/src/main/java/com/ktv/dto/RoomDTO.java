@@ -9,7 +9,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 
 /**
- * 包厢 DTO（新增、修改入参）。
+ * 包厢 DTO，用于新增和修改包厢。
  */
 @Data
 public class RoomDTO {

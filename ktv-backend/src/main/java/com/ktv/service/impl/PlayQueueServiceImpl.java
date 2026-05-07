@@ -48,8 +48,8 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long addSongToQueue(Long orderId, Long songId) {
-        validatePositiveId(orderId, "订单ID不能为空");
-        validatePositiveId(songId, "歌曲ID不能为空");
+        validatePositiveId(orderId, "订单 ID 不能为空");
+        validatePositiveId(songId, "歌曲 ID 不能为空");
         return withQueueMutationLock(orderId, () -> {
             assertActiveOrderForQueueMutation(orderId);
             log.info("添加点歌: orderId={}, songId={}", orderId, songId);
@@ -57,6 +57,9 @@ public class PlayQueueServiceImpl implements PlayQueueService {
             SongVO song = songMapper.selectVOById(songId);
             if (song == null) {
                 throw new BusinessException("歌曲不存在");
+            }
+            if (song.getStatus() == null || song.getStatus() != 1) {
+                throw new BusinessException("该歌曲已下架，暂时不能点歌");
             }
 
             int sortOrder = orderSongMapper.selectList(new LambdaQueryWrapper<OrderSong>()
@@ -92,8 +95,8 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void topSong(Long orderId, Long orderSongId) {
-        validatePositiveId(orderId, "订单ID不能为空");
-        validatePositiveId(orderSongId, "点歌记录ID不能为空");
+        validatePositiveId(orderId, "订单 ID 不能为空");
+        validatePositiveId(orderSongId, "点歌记录 ID 不能为空");
         withQueueMutationLock(orderId, () -> {
             assertActiveOrderForQueueMutation(orderId);
             log.info("置顶歌曲: orderId={}, orderSongId={}", orderId, orderSongId);
@@ -139,8 +142,8 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeSong(Long orderId, Long orderSongId) {
-        validatePositiveId(orderId, "订单ID不能为空");
-        validatePositiveId(orderSongId, "点歌记录ID不能为空");
+        validatePositiveId(orderId, "订单 ID 不能为空");
+        validatePositiveId(orderSongId, "点歌记录 ID 不能为空");
         withQueueMutationLock(orderId, () -> {
             assertActiveOrderForQueueMutation(orderId);
             log.info("取消点歌: orderId={}, orderSongId={}", orderId, orderSongId);
@@ -166,7 +169,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
 
     @Override
     public IPage<OrderSong> getQueueList(Page<OrderSong> page, Long orderId) {
-        validatePositiveId(orderId, "订单ID不能为空");
+        validatePositiveId(orderId, "订单 ID 不能为空");
         assertActiveOrder(orderId);
         log.info("查询等待队列: orderId={}", orderId);
         return orderSongMapper.selectByOrderIdAndStatus(page, orderId, OrderSongStatusEnum.WAITING.getCode());
@@ -174,7 +177,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
 
     @Override
     public IPage<OrderSong> getPlayedList(Page<OrderSong> page, Long orderId) {
-        validatePositiveId(orderId, "订单ID不能为空");
+        validatePositiveId(orderId, "订单 ID 不能为空");
         assertActiveOrder(orderId);
         log.info("查询已唱列表: orderId={}", orderId);
         return orderSongMapper.selectPlayedByOrderId(page, orderId);

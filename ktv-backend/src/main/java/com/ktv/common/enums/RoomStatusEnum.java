@@ -13,7 +13,7 @@ public enum RoomStatusEnum {
     AVAILABLE(0, "空闲"),
     IN_USE(1, "使用中"),
     CLEANING(2, "清洁中"),
-    MAINTENANCE(3, "维护中");
+    MAINTENANCE(3, "维修中");
 
     private final int code;
     private final String description;

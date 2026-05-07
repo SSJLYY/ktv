@@ -116,7 +116,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     public void resume(Long orderId) {
         withOrderPlaybackLock(orderId, () -> {
             assertActiveOrder(orderId);
-            log.info("恢复播放: orderId={}", orderId);
+            log.info("继续播放: orderId={}", orderId);
 
             OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
             if (currentSong == null) {
@@ -124,7 +124,7 @@ public class PlayControlServiceImpl implements PlayControlService {
             }
 
             writePlaybackState(orderId, currentSong.getId(), PLAYING);
-            log.info("恢复播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            log.info("继续播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
             return null;
         });
     }
@@ -181,7 +181,12 @@ public class PlayControlServiceImpl implements PlayControlService {
             }
         }
 
-        OrderSong fallbackSong = orderSongMapper.findSongInfoById(selectCurrentPlayingRecordId(orderId));
+        Long fallbackId = selectCurrentPlayingRecordId(orderId);
+        if (fallbackId == null) {
+            return null;
+        }
+
+        OrderSong fallbackSong = orderSongMapper.findSongInfoById(fallbackId);
         if (fallbackSong != null && repairRedisState) {
             writePlaybackState(orderId, fallbackSong.getId(), resolveRecoveredPlaybackStatus(orderId));
         }

@@ -107,8 +107,8 @@ public class RoomController {
     }
 
     private void validateOptionalStatus(Integer status) {
-        if (status != null && (status < 0 || status > 2)) {
-            throw new BusinessException("包厢状态值只能是 0、1 或 2");
+        if (status != null && (status < 0 || status > 3)) {
+            throw new BusinessException("包厢状态值只能是 0、1、2 或 3");
         }
     }
 }

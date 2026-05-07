@@ -14,7 +14,6 @@ import com.ktv.vo.CategoryVO;
 import com.ktv.vo.SingerVO;
 import com.ktv.vo.SongVO;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
@@ -22,12 +21,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 歌曲检索Service实现（包厢端用）
- *
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌曲搜索 Service 实现，供包厢端使用。
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SongSearchServiceImpl implements SongSearchService {
@@ -41,34 +36,27 @@ public class SongSearchServiceImpl implements SongSearchService {
     @Override
     public IPage<SongVO> searchSongs(String keyword, Long pageNum, Long pageSize) {
         if (keyword == null || keyword.trim().isEmpty()) {
-            throw new BusinessException("搜索关键词不能为空");
+            throw new BusinessException("搜索关键字不能为空");
         }
         validatePageParams(pageNum, pageSize);
 
-        // 不转大写：原样传入，XML中分别处理歌名（精确匹配）和拼音（UPPER转换）
-        // 修复：之前toUpperCase()导致中文歌名LIKE匹配失效（"月亮" != "月亮"的大写）
         String searchKeyword = keyword.trim();
-
         Page<SongVO> page = new Page<>(pageNum, pageSize);
         return songMapper.searchByKeyword(page, searchKeyword);
     }
 
     @Override
     public IPage<SongVO> getSongsBySinger(Long singerId, Long pageNum, Long pageSize) {
-        validatePositiveId(singerId, "歌手ID不能为空");
+        validatePositiveId(singerId, "歌手 ID 必须为正整数");
         validatePageParams(pageNum, pageSize);
-        // M23修复：移除冗余的selectById检查，直接分页查询
-        // 如果歌手不存在，selectBySingerId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
         return songMapper.selectBySingerId(page, singerId);
     }
 
     @Override
     public IPage<SongVO> getSongsByCategory(Long categoryId, Long pageNum, Long pageSize) {
-        validatePositiveId(categoryId, "分类ID不能为空");
+        validatePositiveId(categoryId, "分类 ID 必须为正整数");
         validatePageParams(pageNum, pageSize);
-        // M24修复：移除冗余的selectById检查，直接分页查询
-        // 如果分类不存在，selectByCategoryId自然返回空结果，无需额外DB查询
         Page<SongVO> page = new Page<>(pageNum, pageSize);
         return songMapper.selectByCategoryId(page, categoryId);
     }
@@ -76,17 +64,13 @@ public class SongSearchServiceImpl implements SongSearchService {
     @Override
     public List<SingerVO> getAllSingers(String pinyinInitial) {
         LambdaQueryWrapper<Singer> queryWrapper = new LambdaQueryWrapper<>();
-        // 只查询启用的歌手
         queryWrapper.eq(Singer::getStatus, 1);
 
-        // 按拼音首字母筛选
         if (pinyinInitial != null && !pinyinInitial.trim().isEmpty()) {
             queryWrapper.eq(Singer::getPinyinInitial, pinyinInitial.trim().toUpperCase());
         }
 
-        // 按拼音排序
         queryWrapper.orderByAsc(Singer::getPinyin);
-
         List<Singer> singerList = singerMapper.selectList(queryWrapper);
 
         return singerList.stream()
@@ -97,30 +81,21 @@ public class SongSearchServiceImpl implements SongSearchService {
     @Override
     public List<CategoryVO> getAllCategories() {
         LambdaQueryWrapper<Category> queryWrapper = new LambdaQueryWrapper<>();
-        // 只查询启用的分类
         queryWrapper.eq(Category::getStatus, 1);
-        // 按排序号排序
         queryWrapper.orderByAsc(Category::getSortOrder);
 
         List<Category> categoryList = categoryMapper.selectList(queryWrapper);
-
         return categoryList.stream()
                 .map(this::convertCategoryToVO)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 将Singer实体转换为SingerVO
-     */
     private SingerVO convertSingerToVO(Singer singer) {
         SingerVO vo = new SingerVO();
         BeanUtils.copyProperties(singer, vo);
         return vo;
     }
 
-    /**
-     * 将Category实体转换为CategoryVO
-     */
     private CategoryVO convertCategoryToVO(Category category) {
         CategoryVO vo = new CategoryVO();
         BeanUtils.copyProperties(category, vo);
@@ -136,13 +111,13 @@ public class SongSearchServiceImpl implements SongSearchService {
 
     private void validatePageParams(Long pageNum, Long pageSize) {
         if (pageNum == null || pageNum <= 0) {
-            throw new BusinessException("分页页码必须大于0");
+            throw new BusinessException("分页页码必须大于 0");
         }
         if (pageSize == null || pageSize <= 0) {
-            throw new BusinessException("分页大小必须大于0");
+            throw new BusinessException("分页大小必须大于 0");
         }
         if (pageSize > MAX_PAGE_SIZE) {
-            throw new BusinessException("分页大小不能超过100");
+            throw new BusinessException("分页大小不能超过 100");
         }
     }
 }

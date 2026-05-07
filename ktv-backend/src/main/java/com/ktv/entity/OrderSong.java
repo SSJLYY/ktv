@@ -98,7 +98,7 @@ public class OrderSong implements Serializable {
     private Integer deleted;
 
     /**
-     * 歌曲时长，单位：秒。
+     * 歌曲时长，单位秒。
      */
     @TableField(exist = false)
     private Integer duration;

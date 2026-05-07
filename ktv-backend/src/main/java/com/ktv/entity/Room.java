@@ -19,7 +19,7 @@ public class Room extends BaseEntity {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 包厢名称，例如 `A01`、`豪华 1 号`。
+     * 包厢名称，例如 `A01`、`豪华 1 号房`。
      */
     private String name;
 
@@ -46,7 +46,7 @@ public class Room extends BaseEntity {
     private BigDecimal minConsumption;
 
     /**
-     * 状态：0 空闲，1 使用中，2 清洁中，3 维护中。
+     * 状态：0 空闲，1 使用中，2 清洁中，3 维修中。
      */
     private Integer status;
 

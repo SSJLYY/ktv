@@ -27,10 +27,10 @@ public class HotSongController {
     @GetMapping("/hot")
     public Result<List<SongVO>> getHotSongs(@RequestParam(required = false, defaultValue = "20") Integer limit) {
         if (limit == null || limit <= 0) {
-            throw new BusinessException("热门歌曲数量必须大于0");
+            throw new BusinessException("热门歌曲数量必须大于 0");
         }
         if (limit > MAX_LIMIT) {
-            throw new BusinessException("热门歌曲数量不能超过100");
+            throw new BusinessException("热门歌曲数量不能超过 100");
         }
         List<SongVO> hotSongs = hotSongService.getHotSongs(limit);
         return Result.success(hotSongs);

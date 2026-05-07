@@ -46,8 +46,8 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (status != null) {
             queryWrapper.eq(Room::getStatus, status);
         }
-        if (type != null && !type.isEmpty()) {
-            queryWrapper.eq(Room::getType, type);
+        if (type != null && !type.trim().isEmpty()) {
+            queryWrapper.eq(Room::getType, type.trim());
         }
         queryWrapper.orderByAsc(Room::getName);
         return roomMapper.selectList(queryWrapper).stream()
@@ -68,16 +68,21 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createRoom(RoomDTO roomDTO) {
-        assertRoomNameUnique(roomDTO.getName(), null);
+        String normalizedName = normalizeRequiredText(roomDTO.getName(), "包厢名称不能为空");
+        String normalizedType = normalizeRequiredText(roomDTO.getType(), "包厢类型不能为空");
+        assertRoomNameUnique(normalizedName, null);
 
         Room room = new Room();
         BeanUtils.copyProperties(roomDTO, room);
+        room.setName(normalizedName);
+        room.setType(normalizedType);
         if (room.getStatus() == null) {
             room.setStatus(RoomStatusEnum.AVAILABLE.getCode());
         }
         if (room.getMinConsumption() == null) {
             room.setMinConsumption(BigDecimal.ZERO);
         }
+        normalizeOptionalDescription(room);
 
         int inserted = roomMapper.insert(room);
         if (inserted <= 0 || room.getId() == null) {
@@ -92,18 +97,18 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateRoom(Long id, RoomDTO roomDTO) {
         Room existRoom = loadRoom(id);
-        String targetName = roomDTO.getName() != null ? roomDTO.getName() : existRoom.getName();
+        String targetName = roomDTO.getName() != null
+                ? normalizeRequiredText(roomDTO.getName(), "包厢名称不能为空")
+                : existRoom.getName();
         assertRoomNameUnique(targetName, id);
 
         Room room = new Room();
         BeanUtils.copyProperties(roomDTO, room);
         room.setId(id);
-        if (room.getName() == null) {
-            room.setName(existRoom.getName());
-        }
-        if (room.getType() == null) {
-            room.setType(existRoom.getType());
-        }
+        room.setName(targetName);
+        room.setType(roomDTO.getType() != null
+                ? normalizeRequiredText(roomDTO.getType(), "包厢类型不能为空")
+                : existRoom.getType());
         if (room.getCapacity() == null) {
             room.setCapacity(existRoom.getCapacity());
         }
@@ -116,9 +121,10 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (room.getMinConsumption() == null) {
             room.setMinConsumption(existRoom.getMinConsumption());
         }
-        if (room.getDescription() == null) {
+        if (roomDTO.getDescription() == null) {
             room.setDescription(existRoom.getDescription());
         }
+        normalizeOptionalDescription(room);
 
         boolean changed = hasRoomCacheRelevantChange(existRoom, room);
         boolean updated = roomMapper.updateById(room) > 0;
@@ -223,6 +229,23 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         Long count = roomMapper.selectCount(queryWrapper);
         if (count != null && count > 0) {
             throw new BusinessException("包厢名称已存在");
+        }
+    }
+
+    private String normalizeRequiredText(String value, String message) {
+        if (value == null) {
+            throw new BusinessException(message);
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(message);
+        }
+        return normalized;
+    }
+
+    private void normalizeOptionalDescription(Room room) {
+        if (room.getDescription() != null) {
+            room.setDescription(room.getDescription().trim());
         }
     }
 
