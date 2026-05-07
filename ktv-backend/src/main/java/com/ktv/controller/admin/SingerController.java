@@ -20,36 +20,29 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 歌手管理 Controller。
- */
 @RestController
 @RequestMapping("/api/admin/singers")
 @RequiredArgsConstructor
 @Validated
 public class SingerController {
 
-    private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_PAGE_SIZE = 1000;
 
     private final SingerService singerService;
 
-    /**
-     * 分页查询歌手列表。
-     */
     @GetMapping
     public Result<IPage<SingerVO>> getSingerPage(
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String region) {
+            @RequestParam(required = false) String region,
+            @RequestParam(required = false) Integer status) {
         validatePageParams(current, size);
-        IPage<SingerVO> page = singerService.getSingerPage(current, size, name, region);
+        validateOptionalStatus(status);
+        IPage<SingerVO> page = singerService.getSingerPage(current, size, name, region, status);
         return Result.success(page);
     }
 
-    /**
-     * 新增歌手。
-     */
     @PostMapping
     public Result<Long> createSinger(
             @Validated(SingerDTO.Create.class) @RequestBody SingerDTO singerDTO,
@@ -60,9 +53,6 @@ public class SingerController {
         return Result.success(id);
     }
 
-    /**
-     * 根据 ID 获取歌手详情。
-     */
     @GetMapping("/{id}")
     public Result<SingerVO> getSingerById(@PathVariable Long id) {
         validatePositiveId(id, "歌手 ID 必须为正整数");
@@ -70,9 +60,6 @@ public class SingerController {
         return Result.success(singerVO);
     }
 
-    /**
-     * 修改歌手。
-     */
     @PutMapping("/{id}")
     public Result<Boolean> updateSinger(
             @PathVariable Long id,
@@ -85,9 +72,6 @@ public class SingerController {
         return Result.success(success);
     }
 
-    /**
-     * 删除歌手。
-     */
     @DeleteMapping("/{id}")
     public Result<Boolean> deleteSinger(
             @PathVariable Long id,
@@ -113,7 +97,13 @@ public class SingerController {
             throw new BusinessException("每页数量必须大于 0");
         }
         if (size > MAX_PAGE_SIZE) {
-            throw new BusinessException("每页数量不能超过 100");
+            throw new BusinessException("每页数量不能超过 1000");
+        }
+    }
+
+    private void validateOptionalStatus(Integer status) {
+        if (status != null && status != 0 && status != 1) {
+            throw new BusinessException("歌手状态值只能是 0 或 1");
         }
     }
 }

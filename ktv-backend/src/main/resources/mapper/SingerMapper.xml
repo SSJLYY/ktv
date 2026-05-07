@@ -28,6 +28,9 @@
         <if test="region != null and region != ''">
             AND region = #{region}
         </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
         ORDER BY id DESC
     </select>
 

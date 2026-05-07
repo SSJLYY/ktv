@@ -46,10 +46,12 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createCategory(CategoryDTO categoryDTO) {
-        assertCategoryNameUnique(categoryDTO.getName(), null);
+        String normalizedName = normalizeRequiredText(categoryDTO.getName(), "分类名称不能为空");
+        assertCategoryNameUnique(normalizedName, null);
 
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO, category);
+        category.setName(normalizedName);
         if (category.getSortOrder() == null) {
             category.setSortOrder(0);
         }
@@ -68,15 +70,15 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateCategory(Long id, CategoryDTO categoryDTO) {
         Category existCategory = loadCategory(id);
-        String targetName = categoryDTO.getName() != null ? categoryDTO.getName() : existCategory.getName();
+        String targetName = categoryDTO.getName() != null
+                ? normalizeRequiredText(categoryDTO.getName(), "分类名称不能为空")
+                : existCategory.getName();
         assertCategoryNameUnique(targetName, id);
 
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO, category);
         category.setId(id);
-        if (category.getName() == null) {
-            category.setName(existCategory.getName());
-        }
+        category.setName(targetName);
         if (category.getSortOrder() == null) {
             category.setSortOrder(existCategory.getSortOrder());
         }
@@ -130,6 +132,17 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (count != null && count > 0) {
             throw new BusinessException("分类名称已存在");
         }
+    }
+
+    private String normalizeRequiredText(String value, String message) {
+        if (value == null) {
+            throw new BusinessException(message);
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(message);
+        }
+        return normalized;
     }
 
     private CategoryVO convertToVO(Category category) {

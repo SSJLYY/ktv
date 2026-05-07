@@ -67,7 +67,11 @@ public class SongSearchServiceImpl implements SongSearchService {
         queryWrapper.eq(Singer::getStatus, 1);
 
         if (pinyinInitial != null && !pinyinInitial.trim().isEmpty()) {
-            queryWrapper.eq(Singer::getPinyinInitial, pinyinInitial.trim().toUpperCase());
+            String normalizedInitial = pinyinInitial.trim().toUpperCase();
+            if (normalizedInitial.length() != 1) {
+                throw new BusinessException("歌手首字母筛选条件无效");
+            }
+            queryWrapper.eq(Singer::getPinyinInitial, normalizedInitial);
         }
 
         queryWrapper.orderByAsc(Singer::getPinyin);

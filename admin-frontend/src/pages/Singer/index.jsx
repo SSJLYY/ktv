@@ -91,7 +91,7 @@ const Singer = () => {
   }
 
   const handleReset = () => {
-    setQueryParams(defaultQueryParams)
+    setQueryParams({ ...defaultQueryParams })
   }
 
   const handleAdd = () => {

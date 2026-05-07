@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements HotSongService {
 
     private static final int WARM_UP_SIZE = 50;
+    private static final int MAX_LIMIT = 100;
 
     private final SongMapper songMapper;
     private final StringRedisTemplate stringRedisTemplate;
@@ -40,6 +41,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
         if (limit == null || limit <= 0) {
             limit = 20;
         }
+        limit = Math.min(limit, MAX_LIMIT);
 
         Long size = stringRedisTemplate.opsForZSet().size(RedisKeyConstants.SONG_HOT);
         if (size == null || size == 0) {
@@ -162,7 +164,7 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
     }
 
     private List<SongVO> getHotSongsFromDb(Integer limit) {
-        int safeLimit = Math.min(limit != null ? limit : 20, 100);
+        int safeLimit = Math.min(limit != null ? limit : 20, MAX_LIMIT);
 
         LambdaQueryWrapper<Song> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Song::getStatus, 1)

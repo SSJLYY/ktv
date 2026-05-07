@@ -93,7 +93,7 @@ const Room = () => {
   }
 
   const handleReset = () => {
-    setQueryParams(emptyFilters)
+    setQueryParams({ ...emptyFilters })
   }
 
   const handleAdd = () => {

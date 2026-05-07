@@ -53,17 +53,17 @@ public class SongDTO {
     private String lyricPath;
 
     /**
-     * 是否热门，0 否 1 是。
+     * 是否热门：0 否，1 是。
      */
     private Integer isHot;
 
     /**
-     * 是否新歌，0 否 1 是。
+     * 是否新歌：0 否，1 是。
      */
     private Integer isNew;
 
     /**
-     * 状态，0 下架 1 上架。
+     * 状态：0 下架，1 上架。
      */
     private Integer status;
 

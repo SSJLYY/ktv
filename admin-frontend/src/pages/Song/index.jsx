@@ -115,7 +115,7 @@ const Song = () => {
   const loadOptions = useCallback(async () => {
     try {
       const [singerRes, categoryRes] = await Promise.all([
-        getSingerList({ pageNum: 1, pageSize: 1000 }),
+        getSingerList({ pageNum: 1, pageSize: 1000, status: 1 }),
         getAllCategories(),
       ])
       setSingers(singerRes.data?.records || [])
@@ -175,7 +175,7 @@ const Song = () => {
   }
 
   const handleReset = () => {
-    setQueryParams(defaultQueryParams)
+    setQueryParams({ ...defaultQueryParams })
   }
 
   const handleAdd = () => {

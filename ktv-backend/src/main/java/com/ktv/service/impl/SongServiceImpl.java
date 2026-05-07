@@ -67,9 +67,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createSong(SongDTO songDTO) {
-        if (songDTO.getName() == null || songDTO.getName().isBlank()) {
-            throw new BusinessException("歌曲名称不能为空");
-        }
+        String normalizedName = normalizeRequiredText(songDTO.getName(), "歌曲名称不能为空");
         if (songDTO.getSingerId() == null || songDTO.getSingerId() <= 0) {
             throw new BusinessException("歌手 ID 必须为正整数");
         }
@@ -81,6 +79,11 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
+        song.setName(normalizedName);
+        song.setLanguage(normalizeOptionalText(song.getLanguage()));
+        song.setFilePath(normalizeOptionalText(song.getFilePath()));
+        song.setCoverUrl(normalizeOptionalText(song.getCoverUrl()));
+        song.setLyricPath(normalizeOptionalText(song.getLyricPath()));
         song.setPinyin(PinyinUtil.getPinyin(song.getName()));
         song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
 
@@ -143,21 +146,13 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         if (song.getCategoryId() == null) {
             song.setCategoryId(existSong.getCategoryId());
         }
-        if (song.getLanguage() == null) {
-            song.setLanguage(existSong.getLanguage());
-        }
+        song.setLanguage(songDTO.getLanguage() != null ? normalizeOptionalText(songDTO.getLanguage()) : existSong.getLanguage());
         if (song.getDuration() == null) {
             song.setDuration(existSong.getDuration());
         }
-        if (song.getFilePath() == null) {
-            song.setFilePath(existSong.getFilePath());
-        }
-        if (song.getCoverUrl() == null) {
-            song.setCoverUrl(existSong.getCoverUrl());
-        }
-        if (song.getLyricPath() == null) {
-            song.setLyricPath(existSong.getLyricPath());
-        }
+        song.setFilePath(songDTO.getFilePath() != null ? normalizeOptionalText(songDTO.getFilePath()) : existSong.getFilePath());
+        song.setCoverUrl(songDTO.getCoverUrl() != null ? normalizeOptionalText(songDTO.getCoverUrl()) : existSong.getCoverUrl());
+        song.setLyricPath(songDTO.getLyricPath() != null ? normalizeOptionalText(songDTO.getLyricPath()) : existSong.getLyricPath());
         if (song.getIsHot() == null) {
             song.setIsHot(existSong.getIsHot());
         }
@@ -171,16 +166,23 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setPlayCount(existSong.getPlayCount());
         }
 
-        if (song.getName() == null || song.getName().isBlank()) {
+        if (songDTO.getName() == null || songDTO.getName().isBlank()) {
             song.setName(existSong.getName());
             song.setPinyin(existSong.getPinyin());
             song.setPinyinInitial(existSong.getPinyinInitial());
-        } else if (!Objects.equals(existSong.getName(), song.getName())) {
-            song.setPinyin(PinyinUtil.getPinyin(song.getName()));
-            song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
         } else {
-            song.setPinyin(existSong.getPinyin());
-            song.setPinyinInitial(existSong.getPinyinInitial());
+            song.setName(normalizeRequiredText(songDTO.getName(), "歌曲名称不能为空"));
+            if (!Objects.equals(existSong.getName(), song.getName())) {
+                song.setPinyin(PinyinUtil.getPinyin(song.getName()));
+                song.setPinyinInitial(PinyinUtil.getPinyinInitial(song.getName()));
+            } else {
+                song.setPinyin(existSong.getPinyin());
+                song.setPinyinInitial(existSong.getPinyinInitial());
+            }
+        }
+
+        if (song.getLanguage() == null || song.getLanguage().isBlank()) {
+            song.setLanguage("国语");
         }
 
         if (!Objects.equals(existSong.getSingerId(), song.getSingerId())) {
@@ -300,6 +302,21 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         if (size > 100) {
             throw new BusinessException("每页数量不能超过 100");
         }
+    }
+
+    private String normalizeRequiredText(String value, String message) {
+        if (value == null) {
+            throw new BusinessException(message);
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(message);
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value) {
+        return value == null ? null : value.trim();
     }
 
     private void registerAfterCommit(Runnable task) {

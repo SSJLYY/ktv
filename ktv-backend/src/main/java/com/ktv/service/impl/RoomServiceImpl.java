@@ -194,6 +194,9 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
 
     @Override
     public void syncRoomStatusToRedis(Room room) {
+        if (room == null || room.getId() == null) {
+            return;
+        }
         try {
             Map<String, Object> roomStatus = new HashMap<>();
             roomStatus.put("id", room.getId());

@@ -23,18 +23,22 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
     private final SingerMapper singerMapper;
 
     @Override
-    public IPage<SingerVO> getSingerPage(Integer current, Integer size, String name, String region) {
+    public IPage<SingerVO> getSingerPage(Integer current, Integer size, String name, String region, Integer status) {
         Page<SingerVO> page = new Page<>(current, size);
-        return singerMapper.selectPageWithConditions(page, name, region);
+        return singerMapper.selectPageWithConditions(page, name, region, status);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createSinger(SingerDTO singerDTO) {
-        assertSingerNameUnique(singerDTO.getName(), null);
+        String normalizedName = normalizeRequiredText(singerDTO.getName(), "歌手名称不能为空");
+        assertSingerNameUnique(normalizedName, null);
 
         Singer singer = new Singer();
         BeanUtils.copyProperties(singerDTO, singer);
+        singer.setName(normalizedName);
+        singer.setRegion(normalizeOptionalText(singer.getRegion()));
+        singer.setAvatar(normalizeOptionalText(singer.getAvatar()));
         singer.setPinyin(PinyinUtil.getPinyin(singer.getName()));
         singer.setPinyinInitial(PinyinUtil.getPinyinInitial(singer.getName()));
 
@@ -57,24 +61,20 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateSinger(Long id, SingerDTO singerDTO) {
         Singer existSinger = loadSinger(id);
-        String targetName = singerDTO.getName() != null ? singerDTO.getName() : existSinger.getName();
+        String targetName = singerDTO.getName() != null
+                ? normalizeRequiredText(singerDTO.getName(), "歌手名称不能为空")
+                : existSinger.getName();
         assertSingerNameUnique(targetName, id);
 
         Singer singer = new Singer();
         BeanUtils.copyProperties(singerDTO, singer);
         singer.setId(id);
-        if (singer.getName() == null) {
-            singer.setName(existSinger.getName());
-        }
+        singer.setName(targetName);
         if (singer.getGender() == null) {
             singer.setGender(existSinger.getGender());
         }
-        if (singer.getRegion() == null) {
-            singer.setRegion(existSinger.getRegion());
-        }
-        if (singer.getAvatar() == null) {
-            singer.setAvatar(existSinger.getAvatar());
-        }
+        singer.setRegion(singerDTO.getRegion() != null ? normalizeOptionalText(singerDTO.getRegion()) : existSinger.getRegion());
+        singer.setAvatar(singerDTO.getAvatar() != null ? normalizeOptionalText(singerDTO.getAvatar()) : existSinger.getAvatar());
         if (singer.getStatus() == null) {
             singer.setStatus(existSinger.getStatus());
         }
@@ -136,5 +136,20 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
         if (count != null && count > 0) {
             throw new BusinessException("歌手名称已存在");
         }
+    }
+
+    private String normalizeRequiredText(String value, String message) {
+        if (value == null) {
+            throw new BusinessException(message);
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(message);
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalText(String value) {
+        return value == null ? null : value.trim();
     }
 }

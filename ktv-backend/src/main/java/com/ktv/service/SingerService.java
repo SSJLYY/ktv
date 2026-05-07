@@ -23,7 +23,7 @@ public interface SingerService extends IService<Singer> {
      * @param region 地区（可选）
      * @return 分页结果
      */
-    IPage<SingerVO> getSingerPage(Integer current, Integer size, String name, String region);
+    IPage<SingerVO> getSingerPage(Integer current, Integer size, String name, String region, Integer status);
 
     /**
      * 新增歌手。

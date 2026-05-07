@@ -27,5 +27,6 @@ public interface SingerMapper extends BaseMapper<Singer> {
      */
     IPage<SingerVO> selectPageWithConditions(@Param("page") Page<SingerVO> page,
                                              @Param("name") String name,
-                                             @Param("region") String region);
+                                             @Param("region") String region,
+                                             @Param("status") Integer status);
 }

@@ -33,7 +33,7 @@ public class Singer extends BaseEntity {
     private Integer gender;
 
     /**
-     * 地区：内地、港台、欧美、日韩、其他。
+     * 地区：内地、港台、欧美、日语、韩语、其他。
      */
     private String region;
 
