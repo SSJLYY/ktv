@@ -27,40 +27,15 @@ export default function VideoPlayer({ playInfo, onClose }) {
   const playerRef = useRef(null)
   const controlsTimerRef = useRef(null)
   const replayTimerRef = useRef(null)
-  const currentSongIdRef = useRef(playInfo?.songId)
   const isMutedRef = useRef(getSavedMuted())
 
-  const [playing, setPlaying] = useState(true)
+  const [playing, setPlaying] = useState(playInfo?.playStatus !== 'PAUSED')
   const [operating, setOperating] = useState(false)
   const [showControls, setShowControls] = useState(true)
   const [isMuted, setIsMuted] = useState(getSavedMuted)
   const [volume, setVolume] = useState(getSavedVolume)
 
   isMutedRef.current = isMuted
-
-  useEffect(() => {
-    if (playInfo?.songId && currentSongIdRef.current && currentSongIdRef.current !== playInfo.songId) {
-      onClose?.()
-      return
-    }
-
-    currentSongIdRef.current = playInfo?.songId
-    if (playInfo?.songId) {
-      setPlaying(true)
-      resetControlsTimer()
-    }
-
-    return () => {
-      if (controlsTimerRef.current) {
-        clearTimeout(controlsTimerRef.current)
-        controlsTimerRef.current = null
-      }
-      if (replayTimerRef.current) {
-        clearTimeout(replayTimerRef.current)
-        replayTimerRef.current = null
-      }
-    }
-  }, [playInfo?.songId, onClose])
 
   const resetControlsTimer = () => {
     if (controlsTimerRef.current) {
@@ -73,23 +48,53 @@ export default function VideoPlayer({ playInfo, onClose }) {
     }, 3000)
   }
 
+  useEffect(() => {
+    if (!playInfo?.songId) {
+      return
+    }
+
+    setPlaying(playInfo.playStatus !== 'PAUSED')
+    resetControlsTimer()
+
+    return () => {
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current)
+        controlsTimerRef.current = null
+      }
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current)
+        replayTimerRef.current = null
+      }
+    }
+  }, [playInfo?.songId, playInfo?.playStatus])
+
+  useEffect(() => {
+    if (!playInfo) {
+      return
+    }
+    setPlaying(playInfo.playStatus !== 'PAUSED')
+  }, [playInfo?.playStatus, playInfo])
+
   const handleEnd = async () => {
+    if (!orderId) {
+      return
+    }
     try {
       await nextSong(orderId)
       Toast.show({ content: '已切歌', icon: 'success' })
-      onClose?.()
     } catch {
       // handled by request interceptor
     }
   }
 
   const handleNext = async () => {
-    if (operating) return
+    if (operating || !orderId) {
+      return
+    }
     setOperating(true)
     try {
       await nextSong(orderId)
       Toast.show({ content: '已切歌', icon: 'success' })
-      onClose?.()
     } catch {
       // handled by request interceptor
     } finally {
@@ -98,7 +103,9 @@ export default function VideoPlayer({ playInfo, onClose }) {
   }
 
   const handleReplay = async () => {
-    if (operating || !playerRef.current) return
+    if (operating || !playerRef.current || !orderId) {
+      return
+    }
     setOperating(true)
     try {
       await replaySong(orderId)
@@ -126,7 +133,9 @@ export default function VideoPlayer({ playInfo, onClose }) {
     localStorage.setItem('ktv_muted', String(nextMuted))
   }
 
-  if (!playInfo) return null
+  if (!playInfo) {
+    return null
+  }
 
   return (
     <div className="video-player-fullscreen" onClick={resetControlsTimer}>

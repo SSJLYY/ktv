@@ -1,24 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Table,
   Button,
-  Space,
-  Select,
-  Modal,
-  Form,
-  message,
-  Tag,
   DatePicker,
   Descriptions,
+  Form,
   Input,
+  Modal,
+  Select,
+  Space,
+  Table,
+  Tag,
+  message,
 } from 'antd'
-import { PlusOutlined, CheckOutlined, EyeOutlined } from '@ant-design/icons'
+import { CheckOutlined, EyeOutlined, PlusOutlined } from '@ant-design/icons'
 import {
-  getOrderList,
-  getOrderById,
-  openOrder,
-  closeOrder,
   cancelOrder,
+  closeOrder,
+  getOrderById,
+  getOrderList,
+  openOrder,
 } from '../../api/order'
 import { getAvailableRooms } from '../../api/room'
 import { useUserStore } from '../../store/userStore'
@@ -44,19 +44,23 @@ const statusTextMap = {
   3: '已取消',
 }
 
+const defaultQueryParams = {
+  pageNum: 1,
+  pageSize: 10,
+  startDate: '',
+  endDate: '',
+  status: '',
+}
+
+const formatAmount = (amount) => (amount != null ? `￥${amount}` : '-')
+
 const Order = () => {
   const userInfo = useUserStore((state) => state.userInfo)
   const isSuperAdmin = userInfo?.role === 'super_admin'
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   const [total, setTotal] = useState(0)
-  const [queryParams, setQueryParams] = useState({
-    pageNum: 1,
-    pageSize: 10,
-    startDate: '',
-    endDate: '',
-    status: '',
-  })
+  const [queryParams, setQueryParams] = useState(defaultQueryParams)
   const [dateRange, setDateRange] = useState(null)
   const [openModalVisible, setOpenModalVisible] = useState(false)
   const [detailModalVisible, setDetailModalVisible] = useState(false)
@@ -100,13 +104,7 @@ const Order = () => {
 
   const handleReset = () => {
     setDateRange(null)
-    setQueryParams({
-      pageNum: 1,
-      pageSize: 10,
-      startDate: '',
-      endDate: '',
-      status: '',
-    })
+    setQueryParams({ ...defaultQueryParams })
   }
 
   const handleDateChange = (dates) => {
@@ -120,6 +118,7 @@ const Order = () => {
       }))
       return
     }
+
     setQueryParams((prev) => ({
       ...prev,
       pageNum: 1,
@@ -143,8 +142,7 @@ const Order = () => {
       })
       message.success('开台成功')
       setOpenModalVisible(false)
-      loadOrderList()
-      loadAvailableRooms()
+      await Promise.all([loadOrderList(), loadAvailableRooms()])
     } catch (error) {
       console.error('Open order failed:', error)
     }
@@ -160,8 +158,7 @@ const Order = () => {
         try {
           await closeOrder(id)
           message.success('结账成功')
-          loadOrderList()
-          loadAvailableRooms()
+          await Promise.all([loadOrderList(), loadAvailableRooms()])
         } catch (error) {
           console.error('Close order failed:', error)
         }
@@ -179,8 +176,7 @@ const Order = () => {
         try {
           await cancelOrder(id)
           message.success('取消成功')
-          loadOrderList()
-          loadAvailableRooms()
+          await Promise.all([loadOrderList(), loadAvailableRooms()])
         } catch (error) {
           console.error('Cancel order failed:', error)
         }
@@ -242,14 +238,18 @@ const Order = () => {
       dataIndex: 'totalAmount',
       key: 'totalAmount',
       width: 100,
-      render: (amount) => (amount != null ? `￥${amount}` : '-'),
+      render: formatAmount,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status) => <Tag color={statusColorMap[status]}>{statusTextMap[status]}</Tag>,
+      render: (status) => (
+        <Tag color={statusColorMap[status] || 'default'}>
+          {statusTextMap[status] || '未知'}
+        </Tag>
+      ),
     },
     {
       title: '操作',
@@ -288,8 +288,11 @@ const Order = () => {
           <Select
             placeholder="状态"
             value={queryParams.status}
-            onChange={(value) => setQueryParams((prev) => ({ ...prev, pageNum: 1, status: value }))}
+            onChange={(value) =>
+              setQueryParams((prev) => ({ ...prev, pageNum: 1, status: value ?? '' }))
+            }
             options={statusOptions}
+            allowClear
             style={{ width: 120 }}
           />
           <Button type="primary" onClick={handleSearch}>
@@ -369,17 +372,23 @@ const Order = () => {
             <Descriptions.Item label="包厢类型">{currentOrder.roomType}</Descriptions.Item>
             <Descriptions.Item label="开台时间">{currentOrder.startTime}</Descriptions.Item>
             <Descriptions.Item label="结账时间">{currentOrder.endTime || '-'}</Descriptions.Item>
-            <Descriptions.Item label="消费时长">{currentOrder.durationDesc || '-'}</Descriptions.Item>
+            <Descriptions.Item label="消费时长">
+              {currentOrder.durationDesc || '-'}
+            </Descriptions.Item>
             <Descriptions.Item label="总费用">
-              {currentOrder.totalAmount != null ? `￥${currentOrder.totalAmount}` : '-'}
+              {formatAmount(currentOrder.totalAmount)}
             </Descriptions.Item>
             <Descriptions.Item label="包厢费用">
-              {currentOrder.roomAmount != null ? `￥${currentOrder.roomAmount}` : '-'}
+              {formatAmount(currentOrder.roomAmount)}
             </Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={statusColorMap[currentOrder.status]}>{statusTextMap[currentOrder.status]}</Tag>
+              <Tag color={statusColorMap[currentOrder.status] || 'default'}>
+                {statusTextMap[currentOrder.status] || '未知'}
+              </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="操作员">{currentOrder.operatorName || '-'}</Descriptions.Item>
+            <Descriptions.Item label="操作员">
+              {currentOrder.operatorName || '-'}
+            </Descriptions.Item>
             {(currentOrder.status === 2 || currentOrder.status === 3) && (
               <Descriptions.Item label={currentOrder.status === 2 ? '结账操作员' : '取消操作员'}>
                 {currentOrder.closerName || '-'}

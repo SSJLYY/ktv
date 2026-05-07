@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements SongService {
 
     private static final long CACHE_TTL_HOURS = 1;
+    private static final int ENABLED_STATUS = 1;
 
     private final SongMapper songMapper;
     private final SingerService singerService;
@@ -56,7 +57,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         if (categoryId != null && categoryId <= 0) {
             throw new BusinessException("分类 ID 必须为正整数");
         }
-        if (status != null && status != 0 && status != 1) {
+        if (status != null && status != 0 && status != ENABLED_STATUS) {
             throw new BusinessException("状态值只能是 0 或 1");
         }
 
@@ -68,18 +69,13 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     @Transactional(rollbackFor = Exception.class)
     public Long createSong(SongDTO songDTO) {
         String normalizedName = normalizeRequiredText(songDTO.getName(), "歌曲名称不能为空");
-        if (songDTO.getSingerId() == null || songDTO.getSingerId() <= 0) {
-            throw new BusinessException("歌手 ID 必须为正整数");
-        }
-
-        Singer singer = singerService.getById(songDTO.getSingerId());
-        if (singer == null) {
-            throw new BusinessException("歌手不存在");
-        }
+        Long singerId = requirePositiveSingerId(songDTO.getSingerId());
+        Singer singer = loadEnabledSinger(singerId);
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
         song.setName(normalizedName);
+        song.setSingerId(singer.getId());
         song.setLanguage(normalizeOptionalText(song.getLanguage()));
         song.setFilePath(normalizeOptionalText(song.getFilePath()));
         song.setCoverUrl(normalizeOptionalText(song.getCoverUrl()));
@@ -100,18 +96,17 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setIsNew(1);
         }
         if (song.getStatus() == null) {
-            song.setStatus(1);
+            song.setStatus(ENABLED_STATUS);
         }
         if (song.getPlayCount() == null) {
             song.setPlayCount(0);
         }
 
-        int inserted = songMapper.insert(song);
-        if (inserted <= 0) {
+        if (songMapper.insert(song) <= 0) {
             throw new BusinessException("歌曲创建失败");
         }
 
-        changeSingerSongCount(songDTO.getSingerId(), 1);
+        changeSingerSongCount(singerId, 1);
         registerAfterCommit(() -> refreshSongCache(song.getId()));
         return song.getId();
     }
@@ -129,14 +124,8 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         }
 
         Long targetSingerId = songDTO.getSingerId() != null ? songDTO.getSingerId() : existSong.getSingerId();
-        if (targetSingerId == null || targetSingerId <= 0) {
-            throw new BusinessException("歌手 ID 必须为正整数");
-        }
-
-        Singer newSinger = singerService.getById(targetSingerId);
-        if (newSinger == null) {
-            throw new BusinessException("歌手不存在");
-        }
+        targetSingerId = requirePositiveSingerId(targetSingerId);
+        Singer newSinger = loadEnabledSinger(targetSingerId);
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
@@ -197,8 +186,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             );
         }
 
-        boolean success = songMapper.updateById(song) > 0;
-        if (!success) {
+        if (songMapper.updateById(song) <= 0) {
             throw new BusinessException("歌曲更新失败");
         }
 
@@ -223,8 +211,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             throw new BusinessException("歌曲不存在");
         }
 
-        boolean success = songMapper.deleteById(id) > 0;
-        if (!success) {
+        if (songMapper.deleteById(id) <= 0) {
             throw new BusinessException("歌曲删除失败");
         }
 
@@ -302,6 +289,24 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         if (size > 100) {
             throw new BusinessException("每页数量不能超过 100");
         }
+    }
+
+    private Long requirePositiveSingerId(Long singerId) {
+        if (singerId == null || singerId <= 0) {
+            throw new BusinessException("歌手 ID 必须为正整数");
+        }
+        return singerId;
+    }
+
+    private Singer loadEnabledSinger(Long singerId) {
+        Singer singer = singerService.getById(singerId);
+        if (singer == null) {
+            throw new BusinessException("歌手不存在");
+        }
+        if (singer.getStatus() == null || singer.getStatus() != ENABLED_STATUS) {
+            throw new BusinessException("禁用歌手不能关联歌曲");
+        }
+        return singer;
     }
 
     private String normalizeRequiredText(String value, String message) {

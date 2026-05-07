@@ -111,6 +111,7 @@ export default function PlayBar({ onVideoPlay }) {
     if (!playInfo?.songId) {
       setIsVideoMode(false)
       destroyPlayer()
+      onVideoPlay?.(null)
       return
     }
 
@@ -122,6 +123,7 @@ export default function PlayBar({ onVideoPlay }) {
     }
 
     setIsVideoMode(false)
+    onVideoPlay?.(null)
 
     if (!playerContainerRef.current) {
       return

@@ -46,10 +46,12 @@ const roomStatusMeta = {
   3: { color: 'default', text: '维修中' },
 }
 
-const emptyFilters = {
+const defaultFilters = {
   type: '',
   status: '',
 }
+
+const formatAmount = (value) => `￥${value ?? 0}`
 
 const Room = () => {
   const userInfo = useUserStore((state) => state.userInfo)
@@ -57,7 +59,7 @@ const Room = () => {
 
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
-  const [queryParams, setQueryParams] = useState(emptyFilters)
+  const [queryParams, setQueryParams] = useState(defaultFilters)
   const [modalVisible, setModalVisible] = useState(false)
   const [statusModalVisible, setStatusModalVisible] = useState(false)
   const [editingRoom, setEditingRoom] = useState(null)
@@ -93,7 +95,7 @@ const Room = () => {
   }
 
   const handleReset = () => {
-    setQueryParams({ ...emptyFilters })
+    setQueryParams({ ...defaultFilters })
   }
 
   const handleAdd = () => {
@@ -198,7 +200,7 @@ const Room = () => {
       dataIndex: 'pricePerHour',
       key: 'pricePerHour',
       width: 120,
-      render: (value) => `￥${value ?? 0}`,
+      render: formatAmount,
     },
     {
       title: '最低消费',
