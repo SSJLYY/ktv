@@ -1,29 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DotLoading } from 'antd-mobile'
 import { getAllSingers } from '../../api/song'
 import './SingerList.css'
 
-// 歌手头像组件，带错误处理
 function SingerAvatar({ singer }) {
   const [hasError, setHasError] = useState(false)
 
   if (!singer.avatar || hasError) {
-    // 防御性检查：确保 name 存在且非空
     const initial = singer.name ? singer.name.charAt(0).toUpperCase() : '?'
-    return (
-      <span className="avatar-placeholder">
-        {initial}
-      </span>
-    )
+    return <span className="avatar-placeholder">{initial}</span>
   }
 
-  return (
-    <img
-      src={singer.avatar}
-      alt={singer.name}
-      onError={() => setHasError(true)}
-    />
-  )
+  return <img src={singer.avatar} alt={singer.name} onError={() => setHasError(true)} />
 }
 
 export default function SingerList({ onSelect }) {
@@ -34,29 +22,42 @@ export default function SingerList({ onSelect }) {
 
   useEffect(() => {
     let isMounted = true
+
     getAllSingers()
       .then((res) => {
-        if (isMounted) setSingers(res.data || [])
+        if (isMounted) {
+          setSingers(res.data || [])
+        }
       })
       .catch(() => {})
       .finally(() => {
-        if (isMounted) setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       })
-    return () => { isMounted = false }
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  if (loading) return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
-  if (singers.length === 0) return <div className="empty-text">暂无歌手</div>
+  if (loading) {
+    return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
+  }
 
-  // 按拼音首字母分组（使用 reduce 更高效）
-  const grouped = singers.reduce((acc, s) => {
-    const letter = (s.pinyinInitial || '#').toUpperCase()
-    if (!acc[letter]) acc[letter] = []
-    acc[letter].push(s)
+  if (singers.length === 0) {
+    return <div className="empty-text">暂无歌手</div>
+  }
+
+  const grouped = singers.reduce((acc, singer) => {
+    const letter = (singer.pinyinInitial || '#').toUpperCase()
+    if (!acc[letter]) {
+      acc[letter] = []
+    }
+    acc[letter].push(singer)
     return acc
   }, {})
 
-  // 按字母排序
   const sortedLetters = Object.keys(grouped).sort((a, b) => {
     if (a === '#') return 1
     if (b === '#') return -1
@@ -70,19 +71,15 @@ export default function SingerList({ onSelect }) {
           <div key={letter} className="singer-group" id={`group-${letter}`}>
             <div className="group-letter">{letter}</div>
             {grouped[letter].map((singer) => (
-              <div
-                key={singer.id}
-                className="singer-item"
-                onClick={() => onSelect?.(singer)}
-              >
+              <div key={singer.id} className="singer-item" onClick={() => onSelect?.(singer)}>
                 <div className="singer-avatar">
                   <SingerAvatar singer={singer} />
                 </div>
                 <div className="singer-info">
                   <div className="singer-name">{singer.name}</div>
                   <div className="singer-meta">
-                    {singer.songCount > 0 && `${singer.songCount}首`}
-                    {singer.region && ` · ${singer.region}`}
+                    {singer.songCount > 0 ? `${singer.songCount} 首歌` : '暂无歌曲'}
+                    {singer.region ? ` · ${singer.region}` : ''}
                   </div>
                 </div>
               </div>
@@ -90,7 +87,7 @@ export default function SingerList({ onSelect }) {
           </div>
         ))}
       </div>
-      {/* 右侧字母索引 */}
+
       <div className="letter-index">
         {sortedLetters.map((letter) => (
           <div
@@ -101,7 +98,6 @@ export default function SingerList({ onSelect }) {
               const targetElement = document.getElementById(`group-${letter}`)
               const container = listContentRef.current
               if (targetElement && container) {
-                // 使用容器滚动而不是 document 滚动
                 const targetTop = targetElement.offsetTop - container.offsetTop
                 container.scrollTo({ top: targetTop, behavior: 'smooth' })
               }

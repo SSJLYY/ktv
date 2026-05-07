@@ -1,22 +1,28 @@
 package com.ktv.controller.admin;
 
+import com.ktv.common.exception.BusinessException;
 import com.ktv.common.result.Result;
 import com.ktv.dto.RoomDTO;
 import com.ktv.service.RoomService;
 import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.RoomVO;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * 包厢管理Controller
- *
- * @author shaun.sheng
- * @since 2026-03-30
+ * 包厢管理 Controller。
  */
 @RestController
 @RequestMapping("/api/admin/rooms")
@@ -26,105 +32,83 @@ public class RoomController {
 
     private final RoomService roomService;
 
-    /**
-     * 获取包厢列表（支持按状态和类型筛选）
-     *
-     * @param status 状态（可选）：0空闲 1使用中 2清洁中 3维修中
-     * @param type 类型（可选）：小包/中包/大包/豪华包
-     * @return 包厢列表
-     */
     @GetMapping
     public Result<List<RoomVO>> getRoomList(
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) String type) {
+        validateOptionalStatus(status);
         List<RoomVO> list = roomService.getRoomList(status, type);
         return Result.success(list);
     }
 
-    /**
-     * 获取空闲包厢列表（用于开台选择）
-     *
-     * @return 空闲包厢列表
-     */
     @GetMapping("/available")
     public Result<List<RoomVO>> getAvailableRooms() {
         List<RoomVO> list = roomService.getAvailableRooms();
         return Result.success(list);
     }
 
-    /**
-     * 根据ID获取包厢详情
-     *
-     * @param id 包厢ID
-     * @return 包厢详情
-     */
     @GetMapping("/{id}")
     public Result<RoomVO> getRoomById(@PathVariable Long id) {
+        validatePositiveId(id, "包厢 ID 必须为正整数");
         RoomVO roomVO = roomService.getRoomById(id);
         return Result.success(roomVO);
     }
 
-    /**
-     * 新增包厢
-     *
-     * @param roomDTO 包厢DTO
-     * @return 包厢ID
-     */
     @PostMapping
-    public Result<Long> createRoom(@Valid @RequestBody RoomDTO roomDTO,
-                                   @RequestAttribute(name = "userId", required = false) Long userId,
-                                   @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Long> createRoom(
+            @Validated(RoomDTO.Create.class) @RequestBody RoomDTO roomDTO,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = roomService.createRoom(roomDTO);
         return Result.success(id);
     }
 
-    /**
-     * 修改包厢信息
-     *
-     * @param id 包厢ID
-     * @param roomDTO 包厢DTO
-     * @return 是否成功
-     */
     @PutMapping("/{id}")
-    public Result<Boolean> updateRoom(@PathVariable Long id,
-                                      @Valid @RequestBody RoomDTO roomDTO,
-                                      @RequestAttribute(name = "userId", required = false) Long userId,
-                                      @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Boolean> updateRoom(
+            @PathVariable Long id,
+            @Validated(RoomDTO.Update.class) @RequestBody RoomDTO roomDTO,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
+        validatePositiveId(id, "包厢 ID 必须为正整数");
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.updateRoom(id, roomDTO);
         return Result.success(success);
     }
 
-    /**
-     * 删除包厢（仅允许删除状态为"空闲"的包厢）
-     *
-     * @param id 包厢ID
-     * @return 是否成功
-     */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteRoom(@PathVariable Long id,
-                                      @RequestAttribute(name = "userId", required = false) Long userId,
-                                      @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Boolean> deleteRoom(
+            @PathVariable Long id,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
+        validatePositiveId(id, "包厢 ID 必须为正整数");
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.deleteRoom(id);
         return Result.success(success);
     }
 
-    /**
-     * 更新包厢状态（同步更新Redis中的状态快照）
-     *
-     * @param id 包厢ID
-     * @param status 新状态：0空闲 1使用中 2清洁中 3维修中
-     * @return 是否成功
-     */
     @PutMapping("/{id}/status")
-    public Result<Boolean> updateRoomStatus(@PathVariable Long id,
-                                            @RequestParam Integer status,
-                                            @RequestAttribute(name = "userId", required = false) Long userId,
-                                            @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Boolean> updateRoomStatus(
+            @PathVariable Long id,
+            @RequestParam Integer status,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role) {
+        validatePositiveId(id, "包厢 ID 必须为正整数");
+        validateOptionalStatus(status);
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = roomService.updateRoomStatus(id, status);
         return Result.success(success);
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private void validateOptionalStatus(Integer status) {
+        if (status != null && (status < 0 || status > 2)) {
+            throw new BusinessException("包厢状态值只能是 0、1 或 2");
+        }
     }
 }

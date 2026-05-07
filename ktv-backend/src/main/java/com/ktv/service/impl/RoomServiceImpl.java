@@ -30,9 +30,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
- * 包厢服务实现。
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -82,7 +79,11 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             room.setMinConsumption(BigDecimal.ZERO);
         }
 
-        roomMapper.insert(room);
+        int inserted = roomMapper.insert(room);
+        if (inserted <= 0 || room.getId() == null) {
+            throw new BusinessException("新增包厢失败");
+        }
+
         registerAfterCommit(() -> syncRoomStatusToRedis(loadRoom(room.getId())));
         return room.getId();
     }
@@ -97,19 +98,37 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         Room room = new Room();
         BeanUtils.copyProperties(roomDTO, room);
         room.setId(id);
+        if (room.getName() == null) {
+            room.setName(existRoom.getName());
+        }
+        if (room.getType() == null) {
+            room.setType(existRoom.getType());
+        }
+        if (room.getCapacity() == null) {
+            room.setCapacity(existRoom.getCapacity());
+        }
+        if (room.getPricePerHour() == null) {
+            room.setPricePerHour(existRoom.getPricePerHour());
+        }
         if (room.getStatus() == null) {
             room.setStatus(existRoom.getStatus());
         }
         if (room.getMinConsumption() == null) {
             room.setMinConsumption(existRoom.getMinConsumption());
         }
+        if (room.getDescription() == null) {
+            room.setDescription(existRoom.getDescription());
+        }
 
-        boolean changed = hasRoomCacheRelevantChange(existRoom, roomDTO, room);
+        boolean changed = hasRoomCacheRelevantChange(existRoom, room);
         boolean updated = roomMapper.updateById(room) > 0;
-        if (updated && changed) {
+        if (!updated) {
+            throw new BusinessException("修改包厢失败");
+        }
+        if (changed) {
             registerAfterCommit(() -> syncRoomStatusToRedis(loadRoom(id)));
         }
-        return updated;
+        return true;
     }
 
     @Override
@@ -121,10 +140,12 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
 
         boolean deleted = roomMapper.deleteById(id) > 0;
-        if (deleted) {
-            registerAfterCommit(() -> removeRoomStatusFromRedis(id));
+        if (!deleted) {
+            throw new BusinessException("删除包厢失败");
         }
-        return deleted;
+
+        registerAfterCommit(() -> removeRoomStatusFromRedis(id));
+        return true;
     }
 
     @Override
@@ -152,10 +173,12 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         room.setId(id);
         room.setStatus(status);
         boolean updated = roomMapper.updateById(room) > 0;
-        if (updated) {
-            registerAfterCommit(() -> syncRoomStatusToRedis(loadRoom(id)));
+        if (!updated) {
+            throw new BusinessException("更新包厢状态失败");
         }
-        return updated;
+
+        registerAfterCommit(() -> syncRoomStatusToRedis(loadRoom(id)));
+        return true;
     }
 
     @Override
@@ -177,7 +200,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             stringRedisTemplate.opsForHash().put(RedisKeyConstants.ROOM_STATUS, room.getId().toString(), json);
             log.debug("包厢状态已同步到 Redis: id={}, status={}", room.getId(), room.getStatus());
         } catch (JsonProcessingException e) {
-            log.warn("同步包厢状态到 Redis 失败（序列化错误）: {}", e.getMessage());
+            log.warn("包厢状态序列化失败: {}", e.getMessage());
         } catch (Exception e) {
             log.warn("同步包厢状态到 Redis 失败: {}", e.getMessage());
         }
@@ -203,11 +226,9 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
     }
 
-    private boolean hasRoomCacheRelevantChange(Room existRoom, RoomDTO roomDTO, Room updatedRoom) {
-        String newName = roomDTO.getName() != null ? roomDTO.getName() : existRoom.getName();
-        String newType = roomDTO.getType() != null ? roomDTO.getType() : existRoom.getType();
-        return !Objects.equals(existRoom.getName(), newName)
-                || !Objects.equals(existRoom.getType(), newType)
+    private boolean hasRoomCacheRelevantChange(Room existRoom, Room updatedRoom) {
+        return !Objects.equals(existRoom.getName(), updatedRoom.getName())
+                || !Objects.equals(existRoom.getType(), updatedRoom.getType())
                 || !Objects.equals(existRoom.getStatus(), updatedRoom.getStatus());
     }
 

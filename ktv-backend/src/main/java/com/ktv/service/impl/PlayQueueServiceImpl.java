@@ -18,6 +18,7 @@ import com.ktv.vo.SongVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.integration.redis.util.RedisLockRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -25,7 +26,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
 @Slf4j
 @Service
@@ -38,117 +41,132 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     private final OrderSongMapper orderSongMapper;
     private final SongMapper songMapper;
     private final StringRedisTemplate stringRedisTemplate;
+    private final RedisLockRegistry redisLockRegistry;
     private final HotSongService hotSongService;
     private final PlayControlService playControlService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long addSongToQueue(Long orderId, Long songId) {
-        assertActiveOrder(orderId);
-        log.info("点歌: orderId={}, songId={}", orderId, songId);
+        validatePositiveId(orderId, "订单ID不能为空");
+        validatePositiveId(songId, "歌曲ID不能为空");
+        return withQueueMutationLock(orderId, () -> {
+            assertActiveOrderForQueueMutation(orderId);
+            log.info("添加点歌: orderId={}, songId={}", orderId, songId);
 
-        SongVO song = songMapper.selectVOById(songId);
-        if (song == null) {
-            throw new BusinessException("歌曲不存在");
-        }
+            SongVO song = songMapper.selectVOById(songId);
+            if (song == null) {
+                throw new BusinessException("歌曲不存在");
+            }
 
-        Long waitingCount = orderSongMapper.selectCount(new LambdaQueryWrapper<OrderSong>()
-                .eq(OrderSong::getOrderId, orderId)
-                .eq(OrderSong::getStatus, OrderSongStatusEnum.WAITING.getCode()));
-        int sortOrder = waitingCount != null ? waitingCount.intValue() + 1 : 1;
+            int sortOrder = orderSongMapper.selectList(new LambdaQueryWrapper<OrderSong>()
+                            .select(OrderSong::getSortOrder)
+                            .eq(OrderSong::getOrderId, orderId)
+                            .eq(OrderSong::getStatus, OrderSongStatusEnum.WAITING.getCode()))
+                    .stream()
+                    .map(OrderSong::getSortOrder)
+                    .filter(value -> value != null && value > 0)
+                    .max(Integer::compareTo)
+                    .orElse(0) + 1;
 
-        OrderSong orderSong = new OrderSong();
-        orderSong.setOrderId(orderId);
-        orderSong.setSongId(songId);
-        orderSong.setSongName(song.getName());
-        orderSong.setSingerName(song.getSingerName());
-        orderSong.setSortOrder(sortOrder);
-        orderSong.setStatus(OrderSongStatusEnum.WAITING.getCode());
-        orderSong.setCreateTime(LocalDateTime.now());
-        orderSongMapper.insert(orderSong);
+            OrderSong orderSong = new OrderSong();
+            orderSong.setOrderId(orderId);
+            orderSong.setSongId(songId);
+            orderSong.setSongName(song.getName());
+            orderSong.setSingerName(song.getSingerName());
+            orderSong.setSortOrder(sortOrder);
+            orderSong.setStatus(OrderSongStatusEnum.WAITING.getCode());
+            orderSong.setCreateTime(LocalDateTime.now());
 
-        if (hotSongService != null) {
+            if (orderSongMapper.insert(orderSong) <= 0) {
+                throw new BusinessException("点歌失败");
+            }
+
             hotSongService.incrementHotScore(songId);
-        }
-
-        Long orderSongId = orderSong.getId();
-        registerQueueRefreshAfterCommit(orderId, true);
-
-        log.info("点歌成功: orderSongId={}, sortOrder={}", orderSongId, sortOrder);
-        return orderSongId;
+            registerQueueRefreshAfterCommit(orderId, true);
+            log.info("点歌成功: orderSongId={}, sortOrder={}", orderSong.getId(), sortOrder);
+            return orderSong.getId();
+        });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void topSong(Long orderId, Long orderSongId) {
-        assertActiveOrder(orderId);
-        log.info("置顶歌曲: orderId={}, orderSongId={}", orderId, orderSongId);
+        validatePositiveId(orderId, "订单ID不能为空");
+        validatePositiveId(orderSongId, "点歌记录ID不能为空");
+        withQueueMutationLock(orderId, () -> {
+            assertActiveOrderForQueueMutation(orderId);
+            log.info("置顶歌曲: orderId={}, orderSongId={}", orderId, orderSongId);
 
-        OrderSong orderSong = orderSongMapper.selectById(orderSongId);
-        if (orderSong == null) {
-            throw new BusinessException("点歌记录不存在");
-        }
-        if (!orderId.equals(orderSong.getOrderId())) {
-            throw new BusinessException("点歌记录不属于该订单");
-        }
-        if (!orderSong.isWaiting()) {
-            throw new BusinessException("只能置顶等待中的歌曲");
-        }
-
-        List<OrderSong> waitingSongs = listWaitingSongs(orderId);
-        if (waitingSongs.isEmpty()) {
-            return;
-        }
-
-        int nextSortOrder = 1;
-        if (orderSong.getSortOrder() == null || orderSong.getSortOrder() != 1) {
-            orderSong.setSortOrder(nextSortOrder++);
-            orderSongMapper.updateById(orderSong);
-        } else {
-            nextSortOrder = 2;
-        }
-
-        for (OrderSong waitingSong : waitingSongs) {
-            if (waitingSong.getId().equals(orderSongId)) {
-                continue;
+            OrderSong orderSong = loadOrderSong(orderSongId);
+            if (!orderId.equals(orderSong.getOrderId())) {
+                throw new BusinessException("点歌记录不属于当前订单");
             }
-            if (waitingSong.getSortOrder() == null || waitingSong.getSortOrder() != nextSortOrder) {
-                waitingSong.setSortOrder(nextSortOrder);
-                orderSongMapper.updateById(waitingSong);
+            if (!orderSong.isWaiting()) {
+                throw new BusinessException("只能置顶等待中的歌曲");
             }
-            nextSortOrder++;
-        }
 
-        registerQueueRefreshAfterCommit(orderId, false);
-        log.info("置顶成功: orderSongId={}", orderSongId);
+            List<OrderSong> waitingSongs = listWaitingSongs(orderId);
+            if (waitingSongs.isEmpty()) {
+                return null;
+            }
+
+            int nextSortOrder = 1;
+            if (orderSong.getSortOrder() == null || orderSong.getSortOrder() != 1) {
+                orderSong.setSortOrder(nextSortOrder++);
+                updateOrderSong(orderSong, "置顶歌曲失败");
+            } else {
+                nextSortOrder = 2;
+            }
+
+            for (OrderSong waitingSong : waitingSongs) {
+                if (waitingSong.getId().equals(orderSongId)) {
+                    continue;
+                }
+                if (waitingSong.getSortOrder() == null || waitingSong.getSortOrder() != nextSortOrder) {
+                    waitingSong.setSortOrder(nextSortOrder);
+                    updateOrderSong(waitingSong, "重排点歌顺序失败");
+                }
+                nextSortOrder++;
+            }
+
+            registerQueueRefreshAfterCommit(orderId, false);
+            log.info("置顶成功: orderSongId={}", orderSongId);
+            return null;
+        });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeSong(Long orderId, Long orderSongId) {
-        assertActiveOrder(orderId);
-        log.info("取消点歌: orderId={}, orderSongId={}", orderId, orderSongId);
+        validatePositiveId(orderId, "订单ID不能为空");
+        validatePositiveId(orderSongId, "点歌记录ID不能为空");
+        withQueueMutationLock(orderId, () -> {
+            assertActiveOrderForQueueMutation(orderId);
+            log.info("取消点歌: orderId={}, orderSongId={}", orderId, orderSongId);
 
-        OrderSong orderSong = orderSongMapper.selectById(orderSongId);
-        if (orderSong == null) {
-            throw new BusinessException("点歌记录不存在");
-        }
-        if (!orderId.equals(orderSong.getOrderId())) {
-            throw new BusinessException("点歌记录不属于该订单");
-        }
-        if (!orderSong.isWaiting()) {
-            throw new BusinessException("只能取消等待中的歌曲");
-        }
+            OrderSong orderSong = loadOrderSong(orderSongId);
+            if (!orderId.equals(orderSong.getOrderId())) {
+                throw new BusinessException("点歌记录不属于当前订单");
+            }
+            if (!orderSong.isWaiting()) {
+                throw new BusinessException("只能取消等待中的歌曲");
+            }
 
-        orderSongMapper.deleteById(orderSongId);
-        normalizeWaitingSortOrder(orderId);
-        registerQueueRefreshAfterCommit(orderId, false);
+            if (orderSongMapper.deleteById(orderSongId) <= 0) {
+                throw new BusinessException("取消点歌失败");
+            }
 
-        log.info("取消点歌成功: orderSongId={}", orderSongId);
+            normalizeWaitingSortOrder(orderId);
+            registerQueueRefreshAfterCommit(orderId, false);
+            log.info("取消点歌成功: orderSongId={}", orderSongId);
+            return null;
+        });
     }
 
     @Override
     public IPage<OrderSong> getQueueList(Page<OrderSong> page, Long orderId) {
+        validatePositiveId(orderId, "订单ID不能为空");
         assertActiveOrder(orderId);
         log.info("查询等待队列: orderId={}", orderId);
         return orderSongMapper.selectByOrderIdAndStatus(page, orderId, OrderSongStatusEnum.WAITING.getCode());
@@ -156,21 +174,43 @@ public class PlayQueueServiceImpl implements PlayQueueService {
 
     @Override
     public IPage<OrderSong> getPlayedList(Page<OrderSong> page, Long orderId) {
+        validatePositiveId(orderId, "订单ID不能为空");
         assertActiveOrder(orderId);
-        log.info("查询已播列表: orderId={}", orderId);
+        log.info("查询已唱列表: orderId={}", orderId);
         return orderSongMapper.selectPlayedByOrderId(page, orderId);
     }
 
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
+    }
+
     private void assertActiveOrder(Long orderId) {
-        Order order = orderMapper.selectById(orderId);
+        assertActiveOrder(orderId, orderMapper.selectById(orderId));
+    }
+
+    private void assertActiveOrderForQueueMutation(Long orderId) {
+        assertActiveOrder(orderId, orderMapper.selectByIdForUpdate(orderId));
+    }
+
+    private void assertActiveOrder(Long orderId, Order order) {
         if (order == null) {
             throw new BusinessException("订单不存在");
         }
         if (!order.isActive()) {
             stringRedisTemplate.delete(RedisKeyConstants.buildQueueKey(orderId));
             clearPlaybackKeys(orderId);
-            throw new BusinessException("该订单不在进行中");
+            throw new BusinessException("当前订单未处于进行中状态");
         }
+    }
+
+    private OrderSong loadOrderSong(Long orderSongId) {
+        OrderSong orderSong = orderSongMapper.selectById(orderSongId);
+        if (orderSong == null) {
+            throw new BusinessException("点歌记录不存在");
+        }
+        return orderSong;
     }
 
     private List<OrderSong> listWaitingSongs(Long orderId) {
@@ -188,7 +228,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         for (OrderSong waitingSong : waitingSongs) {
             if (waitingSong.getSortOrder() == null || waitingSong.getSortOrder() != sortOrder) {
                 waitingSong.setSortOrder(sortOrder);
-                orderSongMapper.updateById(waitingSong);
+                updateOrderSong(waitingSong, "重排点歌顺序失败");
             }
             sortOrder++;
         }
@@ -232,12 +272,12 @@ public class PlayQueueServiceImpl implements PlayQueueService {
 
     private void triggerAutoStartPlayback(Long orderId) {
         try {
-            if (playControlService != null && shouldAutoStartPlayback(orderId)) {
+            if (shouldAutoStartPlayback(orderId)) {
                 log.info("当前没有有效播放歌曲，自动触发下一首: orderId={}", orderId);
                 playControlService.next(orderId);
             }
         } catch (Exception e) {
-            log.warn("自动触发播放失败，不影响点歌: orderId={}, error={}", orderId, e.getMessage());
+            log.warn("自动触发播放失败，不影响点歌: orderId={}, error={}", orderId, e.getMessage(), e);
         }
     }
 
@@ -269,5 +309,36 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     private void clearPlaybackKeys(Long orderId) {
         stringRedisTemplate.delete(RedisKeyConstants.buildPlayingKey(orderId));
         stringRedisTemplate.delete(RedisKeyConstants.buildPlayStatusKey(orderId));
+    }
+
+    private void updateOrderSong(OrderSong orderSong, String failureMessage) {
+        if (orderSongMapper.updateById(orderSong) <= 0) {
+            throw new BusinessException(failureMessage);
+        }
+    }
+
+    private <T> T withQueueMutationLock(Long orderId, Callable<T> action) {
+        String lockKey = "lock:play_queue:order:" + orderId;
+        Lock lock = redisLockRegistry.obtain(lockKey);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(10, TimeUnit.SECONDS);
+            if (!locked) {
+                throw new BusinessException("点歌队列操作繁忙，请稍后重试");
+            }
+            return action.call();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("点歌队列操作已中断，请重试");
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("点歌队列操作失败: orderId={}, error={}", orderId, e.getMessage(), e);
+            throw new BusinessException("点歌队列操作失败，请稍后重试");
+        } finally {
+            if (locked) {
+                lock.unlock();
+            }
+        }
     }
 }

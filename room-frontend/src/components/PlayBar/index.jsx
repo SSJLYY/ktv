@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Toast } from 'antd-mobile'
 import {
   PlayOutline,
@@ -22,37 +22,51 @@ import useRoomStore from '../../store/roomStore'
 import './index.css'
 
 export default function PlayBar({ onVideoPlay }) {
-  const orderId = useRoomStore((s) => s.orderId)
-  const queueVersion = useRoomStore((s) => s.queueVersion)
+  const orderId = useRoomStore((state) => state.orderId)
+  const queueVersion = useRoomStore((state) => state.queueVersion)
   const [playInfo, setPlayInfo] = useState(null)
   const [operating, setOperating] = useState(false)
   const [isVideoMode, setIsVideoMode] = useState(false)
+
   const playerRef = useRef(null)
   const playerContainerRef = useRef(null)
-  const timerRef = useRef(null)
-  const retryCountRef = useRef(0)
+  const pollTimerRef = useRef(null)
   const retryTimerRef = useRef(null)
-  const callbacksRef = useRef({})
-  const destroyTimerRef = useRef(null)
+  const retryCountRef = useRef(0)
   const replayTimerRef = useRef(null)
-  const playInfoRef = useRef(playInfo)
-  playInfoRef.current = playInfo
 
   const MAX_RETRY_COUNT = 3
   const RETRY_DELAY_MS = 2000
 
+  const destroyPlayer = useCallback(() => {
+    if (!playerRef.current) {
+      return
+    }
+    try {
+      playerRef.current.destroy()
+    } catch (error) {
+      console.warn('Destroy player failed:', error)
+    }
+    playerRef.current = null
+  }, [])
+
   const fetchPlayStatus = useCallback(async (isRetry = false) => {
-    if (!orderId) return
+    if (!orderId) {
+      setPlayInfo(null)
+      return
+    }
+
     try {
       const res = await getCurrentPlayStatus(orderId)
       setPlayInfo(res.data)
       retryCountRef.current = 0
-    } catch (err) {
-      console.warn('获取播放状态失败', err)
+    } catch (error) {
+      console.warn('Fetch play status failed:', error)
       if (!isRetry && retryCountRef.current < MAX_RETRY_COUNT) {
-        retryCountRef.current++
-        console.log(`将在 ${RETRY_DELAY_MS / 1000}s 后重试获取播放状态（第 ${retryCountRef.current} 次）`)
-        if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+        retryCountRef.current += 1
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current)
+        }
         retryTimerRef.current = setTimeout(() => {
           fetchPlayStatus(true)
         }, RETRY_DELAY_MS)
@@ -61,24 +75,31 @@ export default function PlayBar({ onVideoPlay }) {
   }, [orderId])
 
   useEffect(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+    }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
     }
 
     fetchPlayStatus()
-    timerRef.current = setInterval(fetchPlayStatus, 5000)
+
+    if (orderId) {
+      pollTimerRef.current = setInterval(fetchPlayStatus, 5000)
+    }
 
     return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
       }
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current)
         retryTimerRef.current = null
       }
     }
-  }, [fetchPlayStatus])
+  }, [orderId, fetchPlayStatus])
 
   useEffect(() => {
     if (queueVersion > 0) {
@@ -87,137 +108,95 @@ export default function PlayBar({ onVideoPlay }) {
   }, [queueVersion, fetchPlayStatus])
 
   useEffect(() => {
-    const currentPlayInfo = playInfoRef.current
-    if (!currentPlayInfo?.songId || !playerContainerRef.current) return
+    if (!playInfo?.songId) {
+      setIsVideoMode(false)
+      destroyPlayer()
+      return
+    }
 
-    if (isVideoFile(currentPlayInfo.filePath)) {
+    if (isVideoFile(playInfo.filePath)) {
       setIsVideoMode(true)
-      if (playerRef.current) {
-        try {
-          playerRef.current.pause()
-        } catch (e) {
-          console.warn('暂停播放器失败', e)
-        }
-        if (destroyTimerRef.current) {
-          clearTimeout(destroyTimerRef.current)
-        }
-        destroyTimerRef.current = setTimeout(() => {
-          if (playerRef.current) {
-            try {
-              playerRef.current.destroy()
-            } catch (e) {
-              console.warn('销毁播放器失败', e)
-            }
-            playerRef.current = null
-          }
-          destroyTimerRef.current = null
-        }, 250)
-      }
-      if (onVideoPlay) {
-        onVideoPlay(currentPlayInfo)
-      }
+      destroyPlayer()
+      onVideoPlay?.(playInfo)
       return
     }
 
     setIsVideoMode(false)
 
-    const streamUrl = getMediaStreamUrl(currentPlayInfo.songId)
-    const coverUrl = getCoverUrl(currentPlayInfo.songId)
-
-    if (playerRef.current) {
-      try {
-        playerRef.current.destroy()
-      } catch (e) {
-        console.warn('销毁播放器失败', e)
-      }
+    if (!playerContainerRef.current) {
+      return
     }
 
-    const isMuted = localStorage.getItem('ktv_muted') === 'true'
+    destroyPlayer()
+
+    const savedVolume = Number.parseFloat(localStorage.getItem('ktv_volume') || '0.7')
     const ap = new APlayer({
       container: playerContainerRef.current,
       mini: true,
-      autoplay: currentPlayInfo.playStatus === 'PLAYING',
+      autoplay: playInfo.playStatus === 'PLAYING',
       mutex: true,
       loop: false,
-      volume: (() => {
-        const savedVolume = parseFloat(localStorage.getItem('ktv_volume') || '0.7')
-        return Number.isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume))
-      })(),
-      mute: isMuted,
-      audio: [{
-        name: currentPlayInfo.songName || '未知歌曲',
-        artist: currentPlayInfo.singerName || '未知歌手',
-        url: streamUrl,
-        cover: coverUrl,
-        lrc: '',
-      }],
+      volume: Number.isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume)),
+      mute: localStorage.getItem('ktv_muted') === 'true',
+      audio: [
+        {
+          name: playInfo.songName || '未知歌曲',
+          artist: playInfo.singerName || '未知歌手',
+          url: getMediaStreamUrl(playInfo.songId),
+          cover: getCoverUrl(playInfo.songId),
+          lrc: '',
+        },
+      ],
     })
 
     ap.on('error', () => {
-      console.error('APlayer 播放错误')
-      Toast.show({ content: '音频播放失败，请检查文件', icon: 'fail' })
+      Toast.show({ content: '音频播放失败，请检查媒体文件', icon: 'fail' })
     })
-
-    callbacksRef.current = {
-      onEnded: async () => {
-        try {
-          await nextSong(orderId)
-          fetchPlayStatus()
-        } catch {
-          // handled
-        }
-      },
-      onVolumeChange: (newVolume) => {
-        localStorage.setItem('ktv_volume', newVolume.toString())
-      },
-      onMute: () => {
-        localStorage.setItem('ktv_muted', 'true')
-      },
-      onUnmute: () => {
-        localStorage.setItem('ktv_muted', 'false')
-      },
-    }
-
-    ap.on('ended', callbacksRef.current.onEnded)
-    ap.on('volumechange', callbacksRef.current.onVolumeChange)
-    ap.on('mute', callbacksRef.current.onMute)
-    ap.on('unmute', callbacksRef.current.onUnmute)
+    ap.on('ended', async () => {
+      try {
+        await nextSong(orderId)
+        fetchPlayStatus()
+      } catch {
+        // handled by interceptor
+      }
+    })
+    ap.on('volumechange', (volume) => {
+      localStorage.setItem('ktv_volume', String(volume))
+    })
+    ap.on('mute', () => {
+      localStorage.setItem('ktv_muted', 'true')
+    })
+    ap.on('unmute', () => {
+      localStorage.setItem('ktv_muted', 'false')
+    })
 
     playerRef.current = ap
 
     return () => {
-      if (destroyTimerRef.current) {
-        clearTimeout(destroyTimerRef.current)
-        destroyTimerRef.current = null
-      }
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
         replayTimerRef.current = null
       }
-      if (playerRef.current) {
-        try {
-          playerRef.current.destroy()
-        } catch (e) {
-          console.warn('销毁播放器失败', e)
-        }
-        playerRef.current = null
-      }
+      destroyPlayer()
     }
-  }, [playInfo?.songId, playInfo?.filePath, onVideoPlay, orderId, fetchPlayStatus])
+  }, [playInfo?.songId, playInfo?.filePath, orderId, onVideoPlay, destroyPlayer, fetchPlayStatus])
 
   useEffect(() => {
-    if (!playerRef.current || !playInfoRef.current) return
+    if (!playerRef.current || !playInfo || isVideoMode) {
+      return
+    }
 
-    const currentPlayInfo = playInfoRef.current
-    if (currentPlayInfo.playStatus === 'PLAYING') {
+    if (playInfo.playStatus === 'PLAYING') {
       playerRef.current.play().catch(() => {})
-    } else if (currentPlayInfo.playStatus === 'PAUSED') {
+    } else if (playInfo.playStatus === 'PAUSED') {
       playerRef.current.pause()
     }
-  }, [playInfo?.playStatus])
+  }, [playInfo?.playStatus, playInfo, isVideoMode])
 
   const handleTogglePause = async () => {
-    if (operating || !playInfo) return
+    if (operating || !playInfo || !orderId) {
+      return
+    }
     setOperating(true)
     try {
       if (playInfo.playStatus === 'PLAYING') {
@@ -227,30 +206,34 @@ export default function PlayBar({ onVideoPlay }) {
         await resumePlay(orderId)
         Toast.show({ content: '继续播放', icon: 'success' })
       }
-      fetchPlayStatus()
+      await fetchPlayStatus()
     } catch {
-      // handled
+      // handled by interceptor
     } finally {
       setOperating(false)
     }
   }
 
   const handleNext = async () => {
-    if (operating) return
+    if (operating || !orderId) {
+      return
+    }
     setOperating(true)
     try {
       await nextSong(orderId)
       Toast.show({ content: '已切歌', icon: 'success' })
-      fetchPlayStatus()
+      await fetchPlayStatus()
     } catch {
-      // handled
+      // handled by interceptor
     } finally {
       setOperating(false)
     }
   }
 
   const handleReplay = async () => {
-    if (operating || !playInfo) return
+    if (operating || !playInfo || !orderId) {
+      return
+    }
     setOperating(true)
     try {
       await replaySong(orderId)
@@ -258,32 +241,32 @@ export default function PlayBar({ onVideoPlay }) {
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
       }
-      if (playerRef.current) {
-        replayTimerRef.current = setTimeout(() => {
-          if (playerRef.current) {
-            playerRef.current.seek(0)
-            playerRef.current.play().catch(() => {})
-          }
-          replayTimerRef.current = null
-        }, 300)
-      }
-      fetchPlayStatus()
+      replayTimerRef.current = setTimeout(() => {
+        if (playerRef.current) {
+          playerRef.current.seek(0)
+          playerRef.current.play().catch(() => {})
+        }
+        replayTimerRef.current = null
+      }, 300)
+      await fetchPlayStatus()
     } catch {
-      // handled
+      // handled by interceptor
     } finally {
       setOperating(false)
     }
   }
 
-  const hasSong = playInfo && playInfo.songId && playInfo.playStatus && playInfo.playStatus !== 'NONE'
+  const hasSong = Boolean(
+    playInfo && playInfo.songId && playInfo.playStatus && playInfo.playStatus !== 'NONE'
+  )
   const isPlaying = playInfo?.playStatus === 'PLAYING'
 
   return (
     <div className="play-bar">
       {!hasSong ? (
         <div className="play-bar-empty">
-          <span>🎤</span>
-          <span>暂无歌曲，快去点歌吧</span>
+          <span>♪</span>
+          <span>暂无歌曲，去点一首吧</span>
         </div>
       ) : (
         <div className="play-bar-active">
@@ -296,17 +279,15 @@ export default function PlayBar({ onVideoPlay }) {
             <div className="play-text">
               <div className="play-song-name">{playInfo.songName}</div>
               <div className="play-singer-name">
-                {playInfo.singerName}
-                {playInfo.queueRemaining > 0 && (
+                {playInfo.singerName || '未知歌手'}
+                {playInfo.queueRemaining > 0 ? (
                   <span className="queue-count"> · 待唱 {playInfo.queueRemaining} 首</span>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
 
-          {!isVideoMode && (
-            <div className="player-container" ref={playerContainerRef} />
-          )}
+          {!isVideoMode && <div className="player-container" ref={playerContainerRef} />}
 
           <div className="play-controls">
             <button className="ctrl-btn" onClick={handleReplay} disabled={operating} title="重唱">

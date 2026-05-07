@@ -43,7 +43,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
 
         user.setLastLoginTime(LocalDateTime.now());
         user.setLastLoginIp(loginIp);
-        sysUserMapper.updateById(user);
+        if (sysUserMapper.updateById(user) <= 0) {
+            throw new BusinessException("登录信息更新失败");
+        }
 
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole()));
@@ -58,7 +60,8 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
     @Override
     public SysUser getByUsername(String username) {
         LambdaQueryWrapper<SysUser> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(SysUser::getUsername, username);
+        queryWrapper.eq(SysUser::getUsername, username)
+                .eq(SysUser::getDeleted, 0);
         return sysUserMapper.selectOne(queryWrapper);
     }
 }

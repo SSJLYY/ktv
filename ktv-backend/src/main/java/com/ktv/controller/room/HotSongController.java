@@ -24,9 +24,6 @@ public class HotSongController {
 
     private final HotSongService hotSongService;
 
-    /**
-     * 获取热门歌曲排行榜。
-     */
     @GetMapping("/hot")
     public Result<List<SongVO>> getHotSongs(@RequestParam(required = false, defaultValue = "20") Integer limit) {
         if (limit == null || limit <= 0) {

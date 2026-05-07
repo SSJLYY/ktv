@@ -5,80 +5,71 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
- * 歌曲DTO（新增/修改入参）
- * 
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌曲 DTO，用于新增和修改歌曲。
  */
 @Data
 public class SongDTO {
 
     /**
-     * 歌曲名（新增时必填）
+     * 歌曲名称，新增时必填。
      */
-    @NotBlank(message = "歌曲名不能为空", groups = {Create.class})
+    @NotBlank(message = "歌曲名称不能为空", groups = {Create.class})
     private String name;
 
     /**
-     * 歌手ID（新增时必填）
+     * 歌手 ID，新增时必填。
      */
-    @NotNull(message = "歌手ID不能为空", groups = {Create.class})
+    @NotNull(message = "歌手 ID 不能为空", groups = {Create.class})
     private Long singerId;
 
     /**
-     * 分类ID
+     * 分类 ID。
      */
     private Long categoryId;
 
     /**
-     * 语种：国语/粤语/英语/日语/韩语/其他
+     * 语言，如国语、粤语、英语、日语、韩语、其他。
      */
     private String language;
 
     /**
-     * 时长（秒）
+     * 时长，单位秒。
      */
     private Integer duration;
 
     /**
-     * 歌曲文件相对路径
+     * 歌曲文件相对路径。
      */
     private String filePath;
 
     /**
-     * 封面图片URL
+     * 封面图片 URL。
      */
     private String coverUrl;
 
     /**
-     * 歌词文件路径
+     * 歌词文件路径。
      */
     private String lyricPath;
 
     /**
-     * 是否热门：0否 1是
+     * 是否热门，0 否 1 是。
      */
     private Integer isHot;
 
     /**
-     * 是否新歌：0否 1是
+     * 是否新歌，0 否 1 是。
      */
     private Integer isNew;
 
     /**
-     * 状态：0下架 1上架
+     * 状态，0 下架 1 上架。
      */
     private Integer status;
 
-    /**
-     * 新增校验组
-     */
     public interface Create {
     }
 
-    /**
-     * 更新校验组
-     */
     public interface Update {
     }
 }

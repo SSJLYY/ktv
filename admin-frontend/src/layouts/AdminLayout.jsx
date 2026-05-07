@@ -1,5 +1,5 @@
 import React from 'react'
-import { Layout, Dropdown, Avatar, Space, Button, message } from 'antd'
+import { Layout, Dropdown, Avatar, Space, message } from 'antd'
 import { UserOutlined, LogoutOutlined } from '@ant-design/icons'
 import { Outlet, useNavigate } from 'react-router-dom'
 import SideMenu from '../components/SideMenu'
@@ -12,13 +12,11 @@ const AdminLayout = () => {
   const navigate = useNavigate()
   const { userInfo, logout } = useUserStore()
 
-  // 退出登录
-  // Bug B5修复：先调用后端 logout 接口让服务端失效 Token，再清除本地状态
   const handleLogout = async () => {
     try {
       await logoutApi()
     } catch {
-      // 后端 logout 失败不阻塞前端退出（网络异常、Token 已过期等情况）
+      // Ignore logout API failure and continue local logout.
     } finally {
       logout()
       message.success('已退出登录')
@@ -26,7 +24,6 @@ const AdminLayout = () => {
     }
   }
 
-  // 用户菜单
   const userMenuItems = [
     {
       key: 'logout',
@@ -38,7 +35,6 @@ const AdminLayout = () => {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      {/* 侧边栏 */}
       <Sider
         width={220}
         style={{
@@ -56,14 +52,12 @@ const AdminLayout = () => {
             fontWeight: 'bold',
           }}
         >
-          KTV管理系统
+          KTV 管理系统
         </div>
         <SideMenu />
       </Sider>
 
-      {/* 主内容区 */}
       <Layout>
-        {/* 顶部栏 */}
         <Header
           style={{
             background: '#fff',
@@ -77,8 +71,7 @@ const AdminLayout = () => {
           <div style={{ fontSize: 18, fontWeight: 500 }}>
             后台管理
           </div>
-          
-          {/* 用户信息 */}
+
           <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
             <Space style={{ cursor: 'pointer' }}>
               <Avatar
@@ -92,7 +85,6 @@ const AdminLayout = () => {
           </Dropdown>
         </Header>
 
-        {/* 内容区域 */}
         <Content
           style={{
             margin: '24px',

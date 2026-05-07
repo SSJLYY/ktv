@@ -28,27 +28,27 @@ public class PlayQueueController {
 
     @PostMapping("/add")
     public Result<Long> addSong(@PathVariable Long orderId, @RequestParam Long songId) {
-        validatePositiveId(orderId, "订单ID必须为正整数");
-        validatePositiveId(songId, "歌曲ID必须为正整数");
-        log.info("点歌请求：订单ID={}, 歌曲ID={}", orderId, songId);
+        validatePositiveId(orderId, "订单 ID 必须为正整数");
+        validatePositiveId(songId, "歌曲 ID 必须为正整数");
+        log.info("点歌请求: orderId={}, songId={}", orderId, songId);
         Long orderSongId = playQueueService.addSongToQueue(orderId, songId);
         return Result.success("点歌成功", orderSongId);
     }
 
     @PostMapping("/top/{orderSongId}")
     public Result<Void> topSong(@PathVariable Long orderId, @PathVariable Long orderSongId) {
-        validatePositiveId(orderId, "订单ID必须为正整数");
-        validatePositiveId(orderSongId, "点歌记录ID必须为正整数");
-        log.info("置顶请求：订单ID={}, 点歌记录ID={}", orderId, orderSongId);
+        validatePositiveId(orderId, "订单 ID 必须为正整数");
+        validatePositiveId(orderSongId, "点歌记录 ID 必须为正整数");
+        log.info("置顶请求: orderId={}, orderSongId={}", orderId, orderSongId);
         playQueueService.topSong(orderId, orderSongId);
         return Result.success("置顶成功");
     }
 
     @DeleteMapping("/remove/{orderSongId}")
     public Result<Void> removeSong(@PathVariable Long orderId, @PathVariable Long orderSongId) {
-        validatePositiveId(orderId, "订单ID必须为正整数");
-        validatePositiveId(orderSongId, "点歌记录ID必须为正整数");
-        log.info("取消点歌请求：订单ID={}, 点歌记录ID={}", orderId, orderSongId);
+        validatePositiveId(orderId, "订单 ID 必须为正整数");
+        validatePositiveId(orderSongId, "点歌记录 ID 必须为正整数");
+        log.info("取消点歌请求: orderId={}, orderSongId={}", orderId, orderSongId);
         playQueueService.removeSong(orderId, orderSongId);
         return Result.success("取消点歌成功");
     }
@@ -59,9 +59,9 @@ public class PlayQueueController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        validatePositiveId(orderId, "订单ID必须为正整数");
+        validatePositiveId(orderId, "订单 ID 必须为正整数");
         validatePageParams(current, size);
-        log.info("查询待唱列表：订单ID={}, 页码={}, 每页数量={}", orderId, current, size);
+        log.info("查询待唱列表: orderId={}, current={}, size={}", orderId, current, size);
         Page<OrderSong> pageParam = new Page<>(current, size);
         IPage<OrderSong> voPage = playQueueService.getQueueList(pageParam, orderId);
         return Result.success(voPage);
@@ -73,9 +73,9 @@ public class PlayQueueController {
             @RequestParam(defaultValue = "1") Integer current,
             @RequestParam(defaultValue = "20") Integer size
     ) {
-        validatePositiveId(orderId, "订单ID必须为正整数");
+        validatePositiveId(orderId, "订单 ID 必须为正整数");
         validatePageParams(current, size);
-        log.info("查询已唱列表：订单ID={}, 页码={}, 每页数量={}", orderId, current, size);
+        log.info("查询已唱列表: orderId={}, current={}, size={}", orderId, current, size);
         Page<OrderSong> pageParam = new Page<>(current, size);
         IPage<OrderSong> voPage = playQueueService.getPlayedList(pageParam, orderId);
         return Result.success(voPage);
@@ -89,13 +89,13 @@ public class PlayQueueController {
 
     private void validatePageParams(Integer current, Integer size) {
         if (current == null || current <= 0) {
-            throw new BusinessException("页码必须大于0");
+            throw new BusinessException("页码必须大于 0");
         }
         if (size == null || size <= 0) {
-            throw new BusinessException("每页数量必须大于0");
+            throw new BusinessException("每页数量必须大于 0");
         }
         if (size > MAX_PAGE_SIZE) {
-            throw new BusinessException("每页数量不能超过100");
+            throw new BusinessException("每页数量不能超过 100");
         }
     }
 }

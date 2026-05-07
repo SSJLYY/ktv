@@ -26,7 +26,7 @@ public class AuthController {
     private final SysUserService sysUserService;
 
     @PostMapping("/login")
-    @RateLimit(maxRequests = 10, windowSeconds = 60, message = "登录尝试过于频繁，请1分钟后再试")
+    @RateLimit(maxRequests = 10, windowSeconds = 60, message = "登录尝试过于频繁，请 1 分钟后再试")
     public Result<LoginVO> login(@Valid @RequestBody LoginDTO loginDTO, HttpServletRequest request) {
         String ip = ClientIpUtils.getClientIp(request);
         LoginVO loginVO = sysUserService.login(loginDTO, ip);

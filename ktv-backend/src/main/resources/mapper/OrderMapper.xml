@@ -66,6 +66,14 @@
         LIMIT 1
     </select>
 
+    <select id="selectByIdForUpdate" resultType="com.ktv.entity.Order">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_order o
+        WHERE o.id = #{orderId}
+          AND o.deleted = 0
+        FOR UPDATE
+    </select>
+
     <!-- 原子结账，只允许消费中的订单更新为已结账 -->
     <update id="atomicCloseOrder">
         UPDATE t_order

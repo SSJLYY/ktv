@@ -39,6 +39,7 @@ request.interceptors.response.use(
     if (shouldResetRoomSession(res.message)) {
       resetRoomSession()
     }
+
     Toast.show({ icon: 'fail', content: res.message || '请求失败' })
     return Promise.reject(new Error(res.message || '请求失败'))
   },
@@ -57,6 +58,7 @@ request.interceptors.response.use(
     } else {
       Toast.show({ icon: 'fail', content: '网络连接失败' })
     }
+
     return Promise.reject(error)
   }
 )

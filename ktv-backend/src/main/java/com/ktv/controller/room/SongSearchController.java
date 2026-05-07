@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 歌曲搜索 Controller（包厢端用）。
+ * 歌曲搜索 Controller（包厢端）。
  */
 @RestController
 @RequestMapping("/api/room")
@@ -54,7 +54,7 @@ public class SongSearchController {
             @RequestParam(defaultValue = "1") Long current,
             @RequestParam(defaultValue = "20") Long size
     ) {
-        validatePositiveId(singerId, "歌手ID必须为正整数");
+        validatePositiveId(singerId, "歌手 ID 必须为正整数");
         validatePageParams(current, size);
         IPage<SongVO> result = songSearchService.getSongsBySinger(singerId, current, size);
         return Result.success(result);
@@ -69,7 +69,7 @@ public class SongSearchController {
             @RequestParam(defaultValue = "1") Long current,
             @RequestParam(defaultValue = "20") Long size
     ) {
-        validatePositiveId(categoryId, "分类ID必须为正整数");
+        validatePositiveId(categoryId, "分类 ID 必须为正整数");
         validatePageParams(current, size);
         IPage<SongVO> result = songSearchService.getSongsByCategory(categoryId, current, size);
         return Result.success(result);
@@ -103,13 +103,13 @@ public class SongSearchController {
 
     private void validatePageParams(Long current, Long size) {
         if (current == null || current <= 0) {
-            throw new BusinessException("页码必须大于0");
+            throw new BusinessException("页码必须大于 0");
         }
         if (size == null || size <= 0) {
-            throw new BusinessException("每页数量必须大于0");
+            throw new BusinessException("每页数量必须大于 0");
         }
         if (size > MAX_PAGE_SIZE) {
-            throw new BusinessException("每页数量不能超过100");
+            throw new BusinessException("每页数量不能超过 100");
         }
     }
 }

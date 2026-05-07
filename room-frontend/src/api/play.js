@@ -24,11 +24,11 @@ export const getCurrentPlayStatus = (orderId) =>
 
 // ========== 媒体流 ==========
 
-/** 获取媒体流URL */
+/** 获取媒体流 URL */
 export const getMediaStreamUrl = (songId) =>
   `/api/media/stream/${songId}`
 
-/** 获取封面图URL */
+/** 获取封面图 URL */
 export const getCoverUrl = (songId) =>
   `/api/media/cover/${songId}`
 

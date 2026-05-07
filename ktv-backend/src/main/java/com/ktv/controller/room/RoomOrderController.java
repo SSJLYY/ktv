@@ -30,7 +30,7 @@ public class RoomOrderController {
     @RateLimit(maxRequests = 10, windowSeconds = 60, message = "请求过于频繁，请稍后再试")
     public Result<OrderBasicVO> getOrderInfo(@PathVariable Long orderId, HttpServletRequest request) {
         if (orderId == null || orderId <= 0) {
-            throw new BusinessException("订单ID必须为正整数");
+            throw new BusinessException("订单 ID 必须为正整数");
         }
 
         String clientIp = ClientIpUtils.getClientIp(request);
@@ -38,7 +38,7 @@ public class RoomOrderController {
 
         OrderBasicVO result = orderService.getOrderBasicInfo(orderId);
         if (result == null || result.getStatus() == null || result.getStatus() != OrderStatusEnum.CONSUMING.getCode()) {
-            throw new BusinessException("该订单不在进行中");
+            throw new BusinessException("当前订单未处于进行中状态");
         }
 
         return Result.success(result);

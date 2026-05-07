@@ -14,24 +14,18 @@ const Login = () => {
   const onFinish = async (values) => {
     try {
       setLoading(true)
-      
-      // 调用登录接口
-      // Bug修复：request 拦截器已处理非 200 情况（会 reject），此处无需再判断 res.code
       const res = await login({
         username: values.username,
         password: values.password,
       })
-      
-      // 保存Token和用户信息
+
       setToken(res.data.token)
       setUserInfo(res.data)
-      
+
       message.success('登录成功')
-      
-      // 跳转到首页
       navigate('/')
     } catch (error) {
-      console.error('登录失败:', error)
+      console.error('Login failed:', error)
     } finally {
       setLoading(false)
     }
@@ -39,7 +33,7 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <Card className="login-card" title="KTV管理系统">
+      <Card className="login-card" title="KTV 管理系统">
         <Form
           name="login"
           onFinish={onFinish}

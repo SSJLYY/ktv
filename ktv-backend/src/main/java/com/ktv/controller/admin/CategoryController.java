@@ -1,22 +1,27 @@
 package com.ktv.controller.admin;
 
+import com.ktv.common.exception.BusinessException;
 import com.ktv.common.result.Result;
 import com.ktv.dto.CategoryDTO;
 import com.ktv.service.CategoryService;
 import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.CategoryVO;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
- * 歌曲分类管理Controller
- *
- * @author shaun.sheng
- * @since 2026-03-30
+ * 歌曲分类管理 Controller。
  */
 @RestController
 @RequestMapping("/api/admin/categories")
@@ -27,10 +32,7 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     /**
-     * 获取所有启用的分类列表（按sort_order排序）
-     * 用于下拉选择等场景
-     *
-     * @return 分类列表
+     * 获取所有启用的分类列表，按 sort_order 排序。
      */
     @GetMapping
     public Result<List<CategoryVO>> getCategoryList() {
@@ -39,9 +41,7 @@ public class CategoryController {
     }
 
     /**
-     * 获取所有分类列表（管理员用，包含禁用的）
-     *
-     * @return 分类列表
+     * 获取所有分类列表，供管理员使用。
      */
     @GetMapping("/all")
     public Result<List<CategoryVO>> getAllCategoryList() {
@@ -50,61 +50,63 @@ public class CategoryController {
     }
 
     /**
-     * 根据ID获取分类详情
-     *
-     * @param id 分类ID
-     * @return 分类详情
+     * 根据 ID 获取分类详情。
      */
     @GetMapping("/{id}")
     public Result<CategoryVO> getCategoryById(@PathVariable Long id) {
+        validatePositiveId(id, "分类 ID 必须为正整数");
         CategoryVO categoryVO = categoryService.getCategoryById(id);
         return Result.success(categoryVO);
     }
 
     /**
-     * 新增分类
-     *
-     * @param categoryDTO 分类DTO
-     * @return 分类ID
+     * 新增分类。
      */
     @PostMapping
-    public Result<Long> createCategory(@Valid @RequestBody CategoryDTO categoryDTO,
-                                       @RequestAttribute(name = "userId", required = false) Long userId,
-                                       @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Long> createCategory(
+            @Validated(CategoryDTO.Create.class) @RequestBody CategoryDTO categoryDTO,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
+    ) {
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Long id = categoryService.createCategory(categoryDTO);
         return Result.success(id);
     }
 
     /**
-     * 修改分类
-     *
-     * @param id 分类ID
-     * @param categoryDTO 分类DTO
-     * @return 是否成功
+     * 修改分类。
      */
     @PutMapping("/{id}")
-    public Result<Boolean> updateCategory(@PathVariable Long id,
-                                          @Valid @RequestBody CategoryDTO categoryDTO,
-                                          @RequestAttribute(name = "userId", required = false) Long userId,
-                                          @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Boolean> updateCategory(
+            @PathVariable Long id,
+            @Validated(CategoryDTO.Update.class) @RequestBody CategoryDTO categoryDTO,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
+    ) {
+        validatePositiveId(id, "分类 ID 必须为正整数");
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = categoryService.updateCategory(id, categoryDTO);
         return Result.success(success);
     }
 
     /**
-     * 删除分类（若分类下有歌曲则不可删除）
-     *
-     * @param id 分类ID
-     * @return 是否成功
+     * 删除分类；若分类下存在歌曲则禁止删除。
      */
     @DeleteMapping("/{id}")
-    public Result<Boolean> deleteCategory(@PathVariable Long id,
-                                          @RequestAttribute(name = "userId", required = false) Long userId,
-                                          @RequestAttribute(name = "role", required = false) String role) {
+    public Result<Boolean> deleteCategory(
+            @PathVariable Long id,
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
+    ) {
+        validatePositiveId(id, "分类 ID 必须为正整数");
         AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean success = categoryService.deleteCategory(id);
         return Result.success(success);
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
     }
 }

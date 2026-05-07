@@ -1,5 +1,6 @@
 package com.ktv.service.impl;
 
+import com.ktv.common.exception.BusinessException;
 import com.ktv.entity.Song;
 import com.ktv.mapper.SongMapper;
 import com.ktv.service.MediaService;
@@ -33,6 +34,7 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public Resource getMediaStream(Long songId) {
+        validatePositiveId(songId);
         String filePath = getFilePath(songId);
         if (filePath == null) {
             return null;
@@ -53,6 +55,7 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public String getMediaType(Long songId) {
+        validatePositiveId(songId);
         String filePath = getFilePath(songId);
         if (filePath == null) {
             return "application/octet-stream";
@@ -62,6 +65,7 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public long getMediaSize(Long songId) {
+        validatePositiveId(songId);
         String filePath = getFilePath(songId);
         if (filePath == null) {
             return 0;
@@ -73,6 +77,7 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public Resource getCoverImage(Long songId) {
+        validatePositiveId(songId);
         Song song = songMapper.selectById(songId);
         if (song == null) {
             log.warn("歌曲不存在: {}", songId);
@@ -96,7 +101,8 @@ public class MediaServiceImpl implements MediaService {
 
         File coverFile = normalizedPath.toFile();
         if (!coverFile.exists()) {
-            File coversDir = resolveMediaPath("covers") != null ? resolveMediaPath("covers").toFile() : null;
+            Path coversPath = resolveMediaPath("covers");
+            File coversDir = coversPath != null ? coversPath.toFile() : null;
             if (coversDir != null && coversDir.exists() && coversDir.isDirectory()) {
                 File[] candidates = coversDir.listFiles((dir, name) -> name.startsWith(songId + "."));
                 if (candidates != null && candidates.length > 0) {
@@ -111,8 +117,15 @@ public class MediaServiceImpl implements MediaService {
 
     @Override
     public boolean mediaExists(Long songId) {
+        validatePositiveId(songId);
         String filePath = getFilePath(songId);
         return filePath != null && new File(filePath).exists();
+    }
+
+    private void validatePositiveId(Long songId) {
+        if (songId == null || songId <= 0) {
+            throw new BusinessException("歌曲 ID 必须为正整数");
+        }
     }
 
     private String getFilePath(Long songId) {

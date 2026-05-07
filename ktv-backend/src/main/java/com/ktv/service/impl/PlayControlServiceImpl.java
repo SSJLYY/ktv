@@ -13,6 +13,7 @@ import com.ktv.service.PlayControlService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.integration.redis.util.RedisLockRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -20,7 +21,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
 @Slf4j
 @Service
@@ -35,82 +38,95 @@ public class PlayControlServiceImpl implements PlayControlService {
     private final OrderMapper orderMapper;
     private final OrderSongMapper orderSongMapper;
     private final StringRedisTemplate redisTemplate;
+    private final RedisLockRegistry redisLockRegistry;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void next(Long orderId) {
-        assertActiveOrder(orderId);
-        log.info("切歌: orderId={}", orderId);
+        withOrderPlaybackLock(orderId, () -> {
+            assertActiveOrder(orderId);
+            log.info("切歌: orderId={}", orderId);
 
-        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
-        if (currentSong != null && currentSong.isPlaying()) {
-            currentSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
-            currentSong.setFinishTime(LocalDateTime.now());
-            orderSongMapper.updateById(currentSong);
-        }
+            OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+            if (currentSong != null && currentSong.isPlaying()) {
+                currentSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
+                currentSong.setFinishTime(LocalDateTime.now());
+                updateOrderSong(currentSong, "更新当前歌曲播放状态失败");
+            }
 
-        OrderSong nextSong = findNextWaitingSong(orderId);
-        if (nextSong == null) {
-            registerPlaybackStateRefresh(orderId, null, NONE, true);
-            log.info("切歌完成: 队列为空, orderId={}", orderId);
-            return;
-        }
+            OrderSong nextSong = findNextWaitingSong(orderId);
+            if (nextSong == null) {
+                registerPlaybackStateRefresh(orderId, null, NONE, true);
+                log.info("切歌完成: 队列为空, orderId={}", orderId);
+                return null;
+            }
 
-        nextSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
-        nextSong.setPlayTime(LocalDateTime.now());
-        nextSong.setFinishTime(null);
-        orderSongMapper.updateById(nextSong);
+            nextSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
+            nextSong.setPlayTime(LocalDateTime.now());
+            nextSong.setFinishTime(null);
+            updateOrderSong(nextSong, "切换下一首歌曲失败");
 
-        registerPlaybackStateRefresh(orderId, nextSong.getId(), PLAYING, true);
-        log.info("切歌成功: orderId={}, orderSongId={}, songName={}", orderId, nextSong.getId(), nextSong.getSongName());
+            registerPlaybackStateRefresh(orderId, nextSong.getId(), PLAYING, true);
+            log.info("切歌成功: orderId={}, orderSongId={}, songName={}", orderId, nextSong.getId(), nextSong.getSongName());
+            return null;
+        });
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void replay(Long orderId) {
-        assertActiveOrder(orderId);
-        log.info("重唱: orderId={}", orderId);
+        withOrderPlaybackLock(orderId, () -> {
+            assertActiveOrder(orderId);
+            log.info("重唱: orderId={}", orderId);
 
-        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
-        if (currentSong == null) {
-            throw new BusinessException("当前没有播放的歌曲");
-        }
+            OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+            if (currentSong == null) {
+                throw new BusinessException("当前没有播放中的歌曲");
+            }
 
-        currentSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
-        currentSong.setPlayTime(LocalDateTime.now());
-        currentSong.setFinishTime(null);
-        orderSongMapper.updateById(currentSong);
+            currentSong.setStatus(OrderSongStatusEnum.PLAYING.getCode());
+            currentSong.setPlayTime(LocalDateTime.now());
+            currentSong.setFinishTime(null);
+            updateOrderSong(currentSong, "重唱歌曲失败");
 
-        registerPlaybackStateRefresh(orderId, currentSong.getId(), PLAYING, false);
-        log.info("重唱成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            registerPlaybackStateRefresh(orderId, currentSong.getId(), PLAYING, false);
+            log.info("重唱成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            return null;
+        });
     }
 
     @Override
     public void pause(Long orderId) {
-        assertActiveOrder(orderId);
-        log.info("暂停播放: orderId={}", orderId);
+        withOrderPlaybackLock(orderId, () -> {
+            assertActiveOrder(orderId);
+            log.info("暂停播放: orderId={}", orderId);
 
-        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
-        if (currentSong == null) {
-            throw new BusinessException("当前没有播放的歌曲");
-        }
+            OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+            if (currentSong == null) {
+                throw new BusinessException("当前没有播放中的歌曲");
+            }
 
-        writePlaybackState(orderId, currentSong.getId(), PAUSED);
-        log.info("暂停播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            writePlaybackState(orderId, currentSong.getId(), PAUSED);
+            log.info("暂停播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            return null;
+        });
     }
 
     @Override
     public void resume(Long orderId) {
-        assertActiveOrder(orderId);
-        log.info("恢复播放: orderId={}", orderId);
+        withOrderPlaybackLock(orderId, () -> {
+            assertActiveOrder(orderId);
+            log.info("恢复播放: orderId={}", orderId);
 
-        OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
-        if (currentSong == null) {
-            throw new BusinessException("当前没有播放的歌曲");
-        }
+            OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
+            if (currentSong == null) {
+                throw new BusinessException("当前没有播放中的歌曲");
+            }
 
-        writePlaybackState(orderId, currentSong.getId(), PLAYING);
-        log.info("恢复播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            writePlaybackState(orderId, currentSong.getId(), PLAYING);
+            log.info("恢复播放成功: orderId={}, orderSongId={}", orderId, currentSong.getId());
+            return null;
+        });
     }
 
     @Override
@@ -167,9 +183,14 @@ public class PlayControlServiceImpl implements PlayControlService {
 
         OrderSong fallbackSong = orderSongMapper.findSongInfoById(selectCurrentPlayingRecordId(orderId));
         if (fallbackSong != null && repairRedisState) {
-            writePlaybackState(orderId, fallbackSong.getId(), PLAYING);
+            writePlaybackState(orderId, fallbackSong.getId(), resolveRecoveredPlaybackStatus(orderId));
         }
         return fallbackSong;
+    }
+
+    private String resolveRecoveredPlaybackStatus(Long orderId) {
+        String status = redisTemplate.opsForValue().get(RedisKeyConstants.buildPlayStatusKey(orderId));
+        return PAUSED.equals(status) ? PAUSED : PLAYING;
     }
 
     private Long selectCurrentPlayingRecordId(Long orderId) {
@@ -268,5 +289,37 @@ public class PlayControlServiceImpl implements PlayControlService {
     private void clearCurrentPlaybackState(Long orderId) {
         redisTemplate.delete(RedisKeyConstants.buildPlayingKey(orderId));
         redisTemplate.opsForValue().set(RedisKeyConstants.buildPlayStatusKey(orderId), NONE, KEY_TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    private void updateOrderSong(OrderSong orderSong, String failureMessage) {
+        boolean updated = orderSongMapper.updateById(orderSong) > 0;
+        if (!updated) {
+            throw new BusinessException(failureMessage);
+        }
+    }
+
+    private <T> T withOrderPlaybackLock(Long orderId, Callable<T> action) {
+        String lockKey = "lock:play_control:order:" + orderId;
+        Lock lock = redisLockRegistry.obtain(lockKey);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(10, TimeUnit.SECONDS);
+            if (!locked) {
+                throw new BusinessException("播放操作繁忙，请稍后重试");
+            }
+            return action.call();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("播放操作已中断，请重试");
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("播放操作执行失败: orderId={}, error={}", orderId, e.getMessage(), e);
+            throw new BusinessException("播放操作失败，请稍后重试");
+        } finally {
+            if (locked) {
+                lock.unlock();
+            }
+        }
     }
 }

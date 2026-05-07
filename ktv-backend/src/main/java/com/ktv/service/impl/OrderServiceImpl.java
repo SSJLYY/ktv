@@ -114,7 +114,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         });
 
         Order updatedOrder = orderMapper.selectById(orderId);
-        log.info("结账成功: orderNo={}, durationMinutes={}, totalAmount={}", updatedOrder.getOrderNo(), minutes, totalAmount);
+        log.info("结账成功: orderNo={}, durationMinutes={}, totalAmount={}",
+                updatedOrder.getOrderNo(), minutes, totalAmount);
         return convertToVO(updatedOrder);
     }
 
@@ -153,15 +154,18 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         int updated = orderMapper.atomicCancelOrder(orderId, endTime, (int) minutes, cancellerId);
-        if (updated > 0) {
-            roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.AVAILABLE.getCode());
-            registerAfterCommit(() -> {
-                redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
-                clearPlaybackKeys(orderId);
-            });
-            log.info("订单已取消: orderNo={}, durationMinutes={}, cancellerId={}", order.getOrderNo(), minutes, cancellerId);
+        if (updated == 0) {
+            throw new BusinessException("订单状态已变更，取消失败");
         }
-        return updated > 0;
+
+        roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.AVAILABLE.getCode());
+        registerAfterCommit(() -> {
+            redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
+            clearPlaybackKeys(orderId);
+        });
+        log.info("订单已取消: orderNo={}, durationMinutes={}, cancellerId={}",
+                order.getOrderNo(), minutes, cancellerId);
+        return true;
     }
 
     @Override
@@ -177,7 +181,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException("未找到该订单");
         }
         if (!order.isActive()) {
-            throw new BusinessException("该订单不在进行中");
+            throw new BusinessException("当前订单未处于进行中状态");
         }
 
         String roomName = null;
@@ -220,7 +224,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setRemark(openDTO.getRemark());
         order.setRoomAmount(BigDecimal.ZERO);
         order.setTotalAmount(BigDecimal.ZERO);
-        orderMapper.insert(order);
+
+        int inserted = orderMapper.insert(order);
+        if (inserted <= 0 || order.getId() == null) {
+            throw new BusinessException("开台失败");
+        }
 
         roomService.updateRoomStatus(openDTO.getRoomId(), RoomStatusEnum.IN_USE.getCode());
         registerAfterCommit(() -> {
@@ -233,7 +241,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             );
         });
 
-        log.info("开台成功: orderNo={}, roomId={}, operatorId={}", order.getOrderNo(), openDTO.getRoomId(), operatorId);
+        log.info("开台成功: orderNo={}, roomId={}, operatorId={}",
+                order.getOrderNo(), openDTO.getRoomId(), operatorId);
         return order.getId();
     }
 

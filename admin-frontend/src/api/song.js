@@ -1,18 +1,15 @@
 import request from './request'
 
 /**
- * 歌曲管理API
+ * 歌曲管理 API
  */
 
-// 分页查询歌曲列表
 export const getSongList = (params) => {
-  // 后端参数名：current/size，前端传来的是 pageNum/pageSize
-  // Bug B2修复：params 加默认值 {}，防止不传参时解构 undefined 报错
-  // Bug B3修复：过滤空字符串参数，避免 name=''、singerId=''、language='' 等传给后端
   const { pageNum, pageSize, ...rest } = params || {}
   const cleanRest = Object.fromEntries(
-    Object.entries(rest).filter(([, v]) => v !== '' && v !== null && v !== undefined)
+    Object.entries(rest).filter(([, value]) => value !== '' && value !== null && value !== undefined)
   )
+
   return request({
     url: '/admin/songs',
     method: 'GET',
@@ -24,7 +21,6 @@ export const getSongList = (params) => {
   })
 }
 
-// 根据ID查询歌曲详情
 export const getSongById = (id) => {
   return request({
     url: `/admin/songs/${id}`,
@@ -32,7 +28,6 @@ export const getSongById = (id) => {
   })
 }
 
-// 新增歌曲
 export const addSong = (data) => {
   return request({
     url: '/admin/songs',
@@ -41,7 +36,6 @@ export const addSong = (data) => {
   })
 }
 
-// 修改歌曲
 export const updateSong = (id, data) => {
   return request({
     url: `/admin/songs/${id}`,
@@ -50,7 +44,6 @@ export const updateSong = (id, data) => {
   })
 }
 
-// 删除歌曲
 export const deleteSong = (id) => {
   return request({
     url: `/admin/songs/${id}`,
@@ -58,7 +51,6 @@ export const deleteSong = (id) => {
   })
 }
 
-// 上传歌曲文件
 export const uploadSongFile = (songId, file, onProgress) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -74,7 +66,6 @@ export const uploadSongFile = (songId, file, onProgress) => {
   })
 }
 
-// 上传封面图
 export const uploadCoverImage = (songId, file, onProgress) => {
   const formData = new FormData()
   formData.append('file', file)
@@ -90,8 +81,6 @@ export const uploadCoverImage = (songId, file, onProgress) => {
   })
 }
 
-// 获取分类列表（用于下拉选择）
-// 注意：歌手列表请直接从 singer.js 导入 getSingerList，song.js 不应重复导出同名函数
 export const getCategoryList = () => {
   return request({
     url: '/admin/categories/all',

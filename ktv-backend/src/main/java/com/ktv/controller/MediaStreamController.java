@@ -31,6 +31,7 @@ public class MediaStreamController {
 
     @GetMapping("/stream/{songId}")
     public ResponseEntity<?> streamMedia(@PathVariable Long songId, @RequestHeader HttpHeaders headers) {
+        validatePositiveId(songId, "歌曲 ID 必须为正整数");
         log.info("媒体流请求: songId={}", songId);
 
         if (!mediaService.mediaExists(songId)) {
@@ -56,6 +57,7 @@ public class MediaStreamController {
         if (rangeHeader == null) {
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(mediaType))
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
                     .contentLength(fileSize)
                     .body(resource);
         }
@@ -90,6 +92,7 @@ public class MediaStreamController {
 
     @GetMapping("/cover/{songId}")
     public ResponseEntity<Resource> getCover(@PathVariable Long songId) {
+        validatePositiveId(songId, "歌曲 ID 必须为正整数");
         log.info("封面请求: songId={}", songId);
 
         Resource coverResource = mediaService.getCoverImage(songId);
@@ -116,6 +119,7 @@ public class MediaStreamController {
 
     @GetMapping("/info/{songId}")
     public ResponseEntity<MediaInfo> getMediaInfo(@PathVariable Long songId) {
+        validatePositiveId(songId, "歌曲 ID 必须为正整数");
         log.info("媒体信息请求: songId={}", songId);
 
         if (!mediaService.mediaExists(songId)) {
@@ -129,6 +133,12 @@ public class MediaStreamController {
         info.setStreamUrl("/api/media/stream/" + songId);
         info.setCoverUrl("/api/media/cover/" + songId);
         return ResponseEntity.ok(info);
+    }
+
+    private void validatePositiveId(Long id, String message) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(message);
+        }
     }
 
     private ByteRange parseRange(String rangeHeader, long fileSize) {

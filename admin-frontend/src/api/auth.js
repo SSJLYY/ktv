@@ -1,10 +1,9 @@
 import request from './request'
 
 /**
- * 认证相关API
+ * 认证相关 API
  */
 
-// 管理员登录
 export const login = (data) => {
   return request({
     url: '/admin/login',
@@ -13,7 +12,6 @@ export const login = (data) => {
   })
 }
 
-// 管理员登出
 export const logout = () => {
   return request({
     url: '/admin/logout',

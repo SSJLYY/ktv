@@ -1,99 +1,110 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
-  Table,
   Button,
-  Space,
-  Input,
-  Select,
-  Modal,
+  Divider,
   Form,
+  Input,
   InputNumber,
-  message,
+  Modal,
   Popconfirm,
+  Progress,
+  Select,
+  Space,
+  Table,
   Tag,
   Upload,
-  Progress,
-  Divider,
-  Tooltip,
+  message,
 } from 'antd'
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  UploadOutlined,
-  SoundOutlined,
-  VideoCameraOutlined,
-  PictureOutlined,
   CheckCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PictureOutlined,
+  PlusOutlined,
+  SoundOutlined,
+  UploadOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons'
 import {
-  getSongList,
-  getSongById,
   addSong,
-  updateSong,
   deleteSong,
-  uploadSongFile,
+  getSongById,
+  getSongList,
+  updateSong,
   uploadCoverImage,
+  uploadSongFile,
 } from '../../api/song'
 import { getAllCategories } from '../../api/category'
 import { getSingerList } from '../../api/singer'
 import { useUserStore } from '../../store/userStore'
 
-// 允许上传的文件类型
 const AUDIO_TYPES = ['mp3', 'flac', 'wav', 'ogg', 'm4a']
 const VIDEO_TYPES = ['mp4', 'avi', 'mkv', 'webm']
 const IMAGE_TYPES = ['jpg', 'jpeg', 'png', 'gif', 'webp']
-const ALL_MEDIA_TYPES = [...AUDIO_TYPES, ...VIDEO_TYPES]
+const MEDIA_TYPES = [...AUDIO_TYPES, ...VIDEO_TYPES]
+
+const languageOptions = [
+  { value: '国语', label: '国语' },
+  { value: '粤语', label: '粤语' },
+  { value: '英语', label: '英语' },
+  { value: '日语', label: '日语' },
+  { value: '韩语', label: '韩语' },
+  { value: '其他', label: '其他' },
+]
+
+const defaultQueryParams = {
+  pageNum: 1,
+  pageSize: 10,
+  name: '',
+  singerId: '',
+  categoryId: '',
+  language: '',
+  status: '',
+}
 
 const getFileExt = (filename) => {
   if (!filename) return ''
-  return filename.split('.').pop().toLowerCase()
+  const parts = filename.split('.')
+  return parts.length > 1 ? parts.pop().toLowerCase() : ''
 }
 
 const isAudio = (filename) => AUDIO_TYPES.includes(getFileExt(filename))
 const isVideo = (filename) => VIDEO_TYPES.includes(getFileExt(filename))
 
-// 读取音频时长（秒）
-const getAudioDuration = (file) => {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file)
-    const media = document.createElement(isVideo(file.name) ? 'video' : 'audio')
-    media.src = url
+const getMediaDuration = (file) =>
+  new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const tagName = isVideo(file.name) ? 'video' : 'audio'
+    const media = document.createElement(tagName)
+    media.preload = 'metadata'
+    media.src = objectUrl
     media.onloadedmetadata = () => {
-      URL.revokeObjectURL(url)
-      resolve(Math.round(media.duration))
+      URL.revokeObjectURL(objectUrl)
+      resolve(Number.isFinite(media.duration) ? Math.round(media.duration) : null)
     }
     media.onerror = () => {
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(objectUrl)
       resolve(null)
     }
   })
-}
 
 const Song = () => {
   const userInfo = useUserStore((state) => state.userInfo)
   const isSuperAdmin = userInfo?.role === 'super_admin'
+
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   const [total, setTotal] = useState(0)
-  const [queryParams, setQueryParams] = useState({
-    pageNum: 1,
-    pageSize: 10,
-    name: '',
-    singerId: '',
-    categoryId: '',
-    language: '',
-    status: '',
-  })
+  const [queryParams, setQueryParams] = useState(defaultQueryParams)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingSong, setEditingSong] = useState(null)
   const [form] = Form.useForm()
+
   const [singers, setSingers] = useState([])
   const [categories, setCategories] = useState([])
 
-  // 上传弹窗状态
   const [uploadModalVisible, setUploadModalVisible] = useState(false)
-  const [uploadingSong, setUploadingSong] = useState(null) // 正在上传文件的歌曲
+  const [uploadingSong, setUploadingSong] = useState(null)
   const [mediaFileList, setMediaFileList] = useState([])
   const [coverFileList, setCoverFileList] = useState([])
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -101,69 +112,81 @@ const Song = () => {
   const [uploading, setUploading] = useState(false)
   const [uploadDone, setUploadDone] = useState({ media: false, cover: false })
 
-  // 语种选项
-  const languageOptions = [
-    { value: '', label: '全部' },
-    { value: '国语', label: '国语' },
-    { value: '粤语', label: '粤语' },
-    { value: '英语', label: '英语' },
-    { value: '日语', label: '日语' },
-    { value: '韩语', label: '韩语' },
-    { value: '其他', label: '其他' },
-  ]
-
-  // 加载歌手和分类列表
   const loadOptions = useCallback(async () => {
     try {
-      const singerRes = await getSingerList({ pageNum: 1, pageSize: 1000 })
-      setSingers(singerRes.data.records || [])
-      const categoryRes = await getAllCategories()
+      const [singerRes, categoryRes] = await Promise.all([
+        getSingerList({ pageNum: 1, pageSize: 1000 }),
+        getAllCategories(),
+      ])
+      setSingers(singerRes.data?.records || [])
       setCategories(categoryRes.data || [])
     } catch (error) {
-      console.error('加载选项失败:', error)
+      console.error('Load song options failed:', error)
     }
   }, [])
-
-  useEffect(() => {
-    loadOptions()
-  }, [loadOptions])
 
   const loadSongList = useCallback(async () => {
     try {
       setLoading(true)
       const res = await getSongList(queryParams)
-      setDataSource(res.data.records || [])
-      setTotal(res.data.total || 0)
+      setDataSource(res.data?.records || [])
+      setTotal(res.data?.total || 0)
     } catch (error) {
-      console.error('加载歌曲列表失败:', error)
+      console.error('Load song list failed:', error)
     } finally {
       setLoading(false)
     }
   }, [queryParams])
 
   useEffect(() => {
+    loadOptions()
+  }, [loadOptions])
+
+  useEffect(() => {
     loadSongList()
   }, [loadSongList])
 
+  const resetUploadState = () => {
+    setMediaFileList([])
+    setCoverFileList([])
+    setUploadProgress(0)
+    setCoverProgress(0)
+    setUploadDone({ media: false, cover: false })
+    setUploading(false)
+  }
+
+  const closeEditModal = () => {
+    setModalVisible(false)
+    setEditingSong(null)
+    form.resetFields()
+  }
+
+  const closeUploadModal = () => {
+    if (uploading) {
+      return
+    }
+    setUploadModalVisible(false)
+    setUploadingSong(null)
+    resetUploadState()
+  }
+
   const handleSearch = () => {
-    setQueryParams({ ...queryParams, pageNum: 1 })
+    setQueryParams((prev) => ({ ...prev, pageNum: 1 }))
   }
 
   const handleReset = () => {
-    setQueryParams({
-      pageNum: 1,
-      pageSize: 10,
-      name: '',
-      singerId: '',
-      categoryId: '',
-      language: '',
-      status: '',
-    })
+    setQueryParams(defaultQueryParams)
   }
 
   const handleAdd = () => {
     setEditingSong(null)
     form.resetFields()
+    form.setFieldsValue({
+      status: 1,
+      isHot: 0,
+      isNew: 0,
+      language: '国语',
+    })
     setModalVisible(true)
   }
 
@@ -171,23 +194,29 @@ const Song = () => {
     try {
       const res = await getSongById(record.id)
       setEditingSong(res.data)
-      // BugC1修复：先 resetFields 清空上一次的表单值，再 setFieldsValue 填充
-      // Ant Design Form 的 setFieldsValue 对 null 字段不清空，会导致先后编辑两首歌时字段残留
       form.resetFields()
-      form.setFieldsValue(res.data)
+      form.setFieldsValue({
+        ...res.data,
+        singerId: res.data?.singerId ?? undefined,
+        categoryId: res.data?.categoryId ?? undefined,
+        duration: res.data?.duration ?? undefined,
+        status: res.data?.status ?? 1,
+        isHot: res.data?.isHot ?? 0,
+        isNew: res.data?.isNew ?? 0,
+      })
       setModalVisible(true)
     } catch (error) {
-      console.error('获取歌曲详情失败:', error)
+      console.error('Load song detail failed:', error)
     }
   }
 
   const handleDelete = async (id) => {
     try {
       await deleteSong(id)
-      message.success('删除成功')
-      loadSongList()
+      message.success('歌曲删除成功')
+      await loadSongList()
     } catch (error) {
-      console.error('删除失败:', error)
+      console.error('Delete song failed:', error)
     }
   }
 
@@ -196,190 +225,210 @@ const Song = () => {
       const values = await form.validateFields()
       if (editingSong) {
         await updateSong(editingSong.id, values)
+        message.success('歌曲更新成功')
       } else {
         await addSong(values)
+        message.success('歌曲创建成功')
       }
-      message.success(editingSong ? '修改成功' : '新增成功')
-      setModalVisible(false)
-      loadSongList()
+      closeEditModal()
+      await loadSongList()
     } catch (error) {
-      console.error('提交失败:', error)
+      console.error('Submit song failed:', error)
     }
   }
-
-  // ========== 文件上传逻辑 ==========
 
   const openUploadModal = (record) => {
     setUploadingSong(record)
-    setMediaFileList([])
-    setCoverFileList([])
-    setUploadProgress(0)
-    setCoverProgress(0)
-    setUploadDone({ media: false, cover: false })
-    setUploading(false)
+    resetUploadState()
     setUploadModalVisible(true)
   }
 
-  // 媒体文件选择前校验（不自动上传）
   const beforeMediaUpload = async (file) => {
     const ext = getFileExt(file.name)
-    if (!ALL_MEDIA_TYPES.includes(ext)) {
-      message.error(`不支持的格式，请上传 ${ALL_MEDIA_TYPES.join('/')} 文件`)
+    if (!MEDIA_TYPES.includes(ext)) {
+      message.error(`仅支持 ${MEDIA_TYPES.join('/')} 格式的媒体文件`)
       return Upload.LIST_IGNORE
     }
-    const sizeOk = file.size / 1024 / 1024 <= 100
-    if (!sizeOk) {
-      message.error('文件大小不能超过 100MB')
+    if (file.size / 1024 / 1024 > 100) {
+      message.error('媒体文件大小不能超过 100MB')
       return Upload.LIST_IGNORE
     }
 
-    // 尝试读取时长
-    try {
-      const duration = await getAudioDuration(file)
-      if (duration) {
-        file._duration = duration
-      }
-    } catch { /* ignore */ }
+    const durationSeconds = await getMediaDuration(file)
+    if (durationSeconds) {
+      file.durationSeconds = durationSeconds
+    }
 
     setMediaFileList([file])
-    return false // 阻止自动上传
-  }
-
-  // 封面图选择前校验
-  const beforeCoverUpload = (file) => {
-    const ext = getFileExt(file.name)
-    if (!IMAGE_TYPES.includes(ext)) {
-      message.error(`请上传图片文件 (${IMAGE_TYPES.join('/')})`)
-      return Upload.LIST_IGNORE
-    }
-    if (file.size / 1024 / 1024 > 10) {
-      message.error('封面图不能超过 10MB')
-      return Upload.LIST_IGNORE
-    }
-    setCoverFileList([file])
+    setUploadProgress(0)
+    setUploadDone((prev) => ({ ...prev, media: false }))
     return false
   }
 
-  // 执行上传
-  const handleDoUpload = async () => {
-    if (!mediaFileList.length && !coverFileList.length) {
-      message.warning('请至少选择一个文件进行上传')
-      return
+  const beforeCoverUpload = (file) => {
+    const ext = getFileExt(file.name)
+    if (!IMAGE_TYPES.includes(ext)) {
+      message.error(`仅支持 ${IMAGE_TYPES.join('/')} 格式的封面图片`)
+      return Upload.LIST_IGNORE
     }
-    if (!uploadingSong) return
-
-    setUploading(true)
-    const done = { media: uploadDone.media, cover: uploadDone.cover }
-
-    // 上传媒体文件
-    if (mediaFileList.length) {
-      try {
-        const file = mediaFileList[0]
-        const res = await uploadSongFile(uploadingSong.id, file, (e) => {
-          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
-        })
-        message.success(`媒体文件上传成功：${res.data.fileName}`)
-        done.media = true
-        setUploadDone((prev) => ({ ...prev, media: true }))
-
-        // Bug13修复：更新时长时需携带歌曲完整字段，否则 singerId=null 会触发后端业务异常
-        if (file._duration) {
-          try {
-            await updateSong(uploadingSong.id, {
-              name: uploadingSong.name,
-              singerId: uploadingSong.singerId,
-              categoryId: uploadingSong.categoryId,
-              language: uploadingSong.language,
-              status: uploadingSong.status,
-              isHot: uploadingSong.isHot,
-              isNew: uploadingSong.isNew,
-              duration: file._duration,
-            })
-          } catch { /* ignore */ }
-        }
-      } catch (error) {
-        message.error('媒体文件上传失败')
-        console.error(error)
-      }
+    if (file.size / 1024 / 1024 > 10) {
+      message.error('封面图片大小不能超过 10MB')
+      return Upload.LIST_IGNORE
     }
 
-    // 上传封面图
-    if (coverFileList.length) {
-      try {
-        const file = coverFileList[0]
-        await uploadCoverImage(uploadingSong.id, file, (e) => {
-          if (e.total) setCoverProgress(Math.round((e.loaded / e.total) * 100))
-        })
-        message.success('封面图上传成功')
-        done.cover = true
-        setUploadDone((prev) => ({ ...prev, cover: true }))
-      } catch (error) {
-        message.error('封面图上传失败')
-        console.error(error)
-      }
-    }
-
-    setUploading(false)
-    // Bug B6修复：上传完成后清空已选文件列表，防止用户重复提交同一文件
-    if (done.media) setMediaFileList([])
-    if (done.cover) setCoverFileList([])
-    loadSongList()
+    setCoverFileList([file])
+    setCoverProgress(0)
+    setUploadDone((prev) => ({ ...prev, cover: false }))
+    return false
   }
 
-  // ========== 表格列定义 ==========
+  const syncDurationAfterUpload = async (songId, durationSeconds) => {
+    if (!durationSeconds) {
+      return
+    }
+
+    const latestSongRes = await getSongById(songId)
+    const latestSong = latestSongRes.data
+    await updateSong(songId, {
+      name: latestSong.name,
+      singerId: latestSong.singerId,
+      categoryId: latestSong.categoryId,
+      language: latestSong.language,
+      duration: durationSeconds,
+      filePath: latestSong.filePath,
+      coverUrl: latestSong.coverUrl,
+      lyricPath: latestSong.lyricPath,
+      status: latestSong.status,
+      isHot: latestSong.isHot,
+      isNew: latestSong.isNew,
+    })
+  }
+
+  const handleDoUpload = async () => {
+    if (!uploadingSong) {
+      message.warning('未找到当前歌曲')
+      return
+    }
+    if (!mediaFileList.length && !coverFileList.length) {
+      message.warning('请先选择需要上传的文件')
+      return
+    }
+
+    setUploading(true)
+    const doneState = { ...uploadDone }
+
+    try {
+      if (mediaFileList.length) {
+        const mediaFile = mediaFileList[0]
+        const res = await uploadSongFile(uploadingSong.id, mediaFile, (event) => {
+          if (event.total) {
+            setUploadProgress(Math.round((event.loaded / event.total) * 100))
+          }
+        })
+        message.success(`媒体文件上传成功：${res.data?.fileName || mediaFile.name}`)
+        doneState.media = true
+        setUploadDone((prev) => ({ ...prev, media: true }))
+        await syncDurationAfterUpload(uploadingSong.id, mediaFile.durationSeconds)
+      }
+
+      if (coverFileList.length) {
+        const coverFile = coverFileList[0]
+        await uploadCoverImage(uploadingSong.id, coverFile, (event) => {
+          if (event.total) {
+            setCoverProgress(Math.round((event.loaded / event.total) * 100))
+          }
+        })
+        message.success('封面图片上传成功')
+        doneState.cover = true
+        setUploadDone((prev) => ({ ...prev, cover: true }))
+      }
+    } catch (error) {
+      console.error('Upload failed:', error)
+      message.error(error?.message || '上传失败')
+    } finally {
+      setUploading(false)
+    }
+
+    if (doneState.media) {
+      setMediaFileList([])
+    }
+    if (doneState.cover) {
+      setCoverFileList([])
+    }
+
+    await loadSongList()
+  }
 
   const columns = [
     {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 70,
+      width: 80,
     },
     {
-      title: '歌曲名',
+      title: '歌曲名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 220,
     },
     {
       title: '歌手',
       dataIndex: 'singerName',
       key: 'singerName',
-      width: 130,
+      width: 140,
     },
     {
       title: '分类',
       dataIndex: 'categoryName',
       key: 'categoryName',
-      width: 100,
+      width: 120,
+      render: (value) => value || '-',
     },
     {
-      title: '语种',
+      title: '语言',
       dataIndex: 'language',
       key: 'language',
-      width: 70,
+      width: 100,
+      render: (value) => value || '-',
     },
     {
       title: '时长(秒)',
       dataIndex: 'duration',
       key: 'duration',
-      width: 90,
+      width: 100,
+      render: (value) => value ?? '-',
     },
     {
       title: '播放次数',
       dataIndex: 'playCount',
       key: 'playCount',
-      width: 90,
+      width: 100,
+      render: (value) => value ?? 0,
     },
     {
-      title: '文件',
+      title: '媒体文件',
       dataIndex: 'filePath',
       key: 'filePath',
-      width: 80,
+      width: 120,
       render: (filePath) => {
-        if (!filePath) return <Tag color="default">未上传</Tag>
-        if (isAudio(filePath)) return <Tag color="blue" icon={<SoundOutlined />}>音频</Tag>
-        if (isVideo(filePath)) return <Tag color="purple" icon={<VideoCameraOutlined />}>视频</Tag>
+        if (!filePath) {
+          return <Tag>未上传</Tag>
+        }
+        if (isAudio(filePath)) {
+          return (
+            <Tag color="blue" icon={<SoundOutlined />}>
+              音频
+            </Tag>
+          )
+        }
+        if (isVideo(filePath)) {
+          return (
+            <Tag color="purple" icon={<VideoCameraOutlined />}>
+              视频
+            </Tag>
+          )
+        }
         return <Tag color="green">已上传</Tag>
       },
     },
@@ -387,49 +436,36 @@ const Song = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
+      width: 90,
       render: (status) => (
-        <Tag color={status === 1 ? 'success' : 'error'}>
-          {status === 1 ? '上架' : '下架'}
-        </Tag>
+        <Tag color={status === 1 ? 'success' : 'default'}>{status === 1 ? '上架' : '下架'}</Tag>
       ),
     },
     {
       title: '操作',
       key: 'action',
-      width: 220,
+      width: 260,
       render: (_, record) => (
         <Space>
           {isSuperAdmin && (
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            >
+            <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
               编辑
             </Button>
           )}
           {isSuperAdmin && (
-            <Button
-              type="link"
-              icon={<UploadOutlined />}
-              onClick={() => openUploadModal(record)}
-            >
+            <Button type="link" icon={<UploadOutlined />} onClick={() => openUploadModal(record)}>
               上传
             </Button>
           )}
           {isSuperAdmin && (
             <Popconfirm
-              title="确定删除该歌曲吗?"
+              title="确定删除这首歌曲吗？"
+              description="删除后不可恢复。"
               onConfirm={() => handleDelete(record.id)}
               okText="确定"
               cancelText="取消"
             >
-              <Button
-                type="link"
-                danger
-                icon={<DeleteOutlined />}
-              >
+              <Button type="link" danger icon={<DeleteOutlined />}>
                 删除
               </Button>
             </Popconfirm>
@@ -441,71 +477,57 @@ const Song = () => {
 
   return (
     <div>
-      {/* 搜索栏 */}
       <div style={{ marginBottom: 16 }}>
         <Space wrap>
           <Input
-            placeholder="歌曲名"
+            placeholder="歌曲名称"
             value={queryParams.name}
-            onChange={(e) =>
-              setQueryParams({ ...queryParams, name: e.target.value })
-            }
-            style={{ width: 150 }}
+            onChange={(e) => setQueryParams((prev) => ({ ...prev, name: e.target.value }))}
             onPressEnter={handleSearch}
+            style={{ width: 180 }}
           />
           <Select
             placeholder="歌手"
             value={queryParams.singerId || undefined}
-            onChange={(value) =>
-              setQueryParams({ ...queryParams, singerId: value || '' })
-            }
-            options={singers.map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
-            style={{ width: 150 }}
+            onChange={(value) => setQueryParams((prev) => ({ ...prev, singerId: value || '' }))}
+            options={singers.map((item) => ({ value: item.id, label: item.name }))}
             allowClear
             showSearch
             filterOption={(input, option) =>
-              (option.label || '').toLowerCase().includes(input.toLowerCase())
+              String(option?.label || '').toLowerCase().includes(input.toLowerCase())
             }
+            style={{ width: 180 }}
           />
           <Select
             placeholder="分类"
             value={queryParams.categoryId || undefined}
             onChange={(value) =>
-              setQueryParams({ ...queryParams, categoryId: value || '' })
+              setQueryParams((prev) => ({ ...prev, categoryId: value || '' }))
             }
-            options={categories.map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))}
-            style={{ width: 120 }}
+            options={categories.map((item) => ({ value: item.id, label: item.name }))}
             allowClear
+            style={{ width: 140 }}
           />
           <Select
-            placeholder="语种"
+            placeholder="语言"
             value={queryParams.language || undefined}
-            onChange={(value) =>
-              setQueryParams({ ...queryParams, language: value || '' })
-            }
-            options={languageOptions.filter((item) => item.value !== '')}
-            style={{ width: 100 }}
+            onChange={(value) => setQueryParams((prev) => ({ ...prev, language: value || '' }))}
+            options={languageOptions}
             allowClear
+            style={{ width: 120 }}
           />
-          {/* BugB1配套：管理端现在可以看到下架歌曲，需提供状态筛选 */}
           <Select
             placeholder="状态"
-            value={queryParams.status !== '' ? queryParams.status : undefined}
+            value={queryParams.status === '' ? undefined : queryParams.status}
             onChange={(value) =>
-              setQueryParams({ ...queryParams, status: value !== undefined ? value : '' })
+              setQueryParams((prev) => ({ ...prev, status: value === undefined ? '' : value }))
             }
             options={[
               { value: 1, label: '上架' },
               { value: 0, label: '下架' },
             ]}
-            style={{ width: 100 }}
             allowClear
+            style={{ width: 120 }}
           />
           <Button type="primary" onClick={handleSearch}>
             搜索
@@ -514,7 +536,6 @@ const Song = () => {
         </Space>
       </div>
 
-      {/* 操作按钮 */}
       {isSuperAdmin && (
         <div style={{ marginBottom: 16 }}>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
@@ -523,46 +544,40 @@ const Song = () => {
         </div>
       )}
 
-      {/* 表格 */}
       <Table
+        rowKey="id"
         columns={columns}
         dataSource={dataSource}
-        rowKey="id"
         loading={loading}
-        scroll={{ x: 1100 }}
+        scroll={{ x: 1440 }}
         pagination={{
           current: queryParams.pageNum,
           pageSize: queryParams.pageSize,
-          total: total,
+          total,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showTotal: (value) => `共 ${value} 条`,
           onChange: (pageNum, pageSize) => {
-            setQueryParams({ ...queryParams, pageNum, pageSize })
+            setQueryParams((prev) => ({ ...prev, pageNum, pageSize }))
           },
         }}
       />
 
-      {/* ========== 新增/编辑弹窗 ========== */}
       <Modal
         title={editingSong ? '编辑歌曲' : '新增歌曲'}
         open={modalVisible}
         onOk={handleSubmit}
-        onCancel={() => setModalVisible(false)}
+        onCancel={closeEditModal}
         okText="提交"
         cancelText="取消"
-        width={600}
+        width={640}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          autoComplete="off"
-        >
+        <Form form={form} layout="vertical" autoComplete="off">
           <Form.Item
             name="name"
-            label="歌曲名"
-            rules={[{ required: true, message: '请输入歌曲名' }]}
+            label="歌曲名称"
+            rules={[{ required: true, message: '请输入歌曲名称' }]}
           >
-            <Input placeholder="请输入歌曲名" />
+            <Input placeholder="请输入歌曲名称" />
           </Form.Item>
 
           <Form.Item
@@ -572,13 +587,10 @@ const Song = () => {
           >
             <Select
               placeholder="请选择歌手"
-              options={singers.map((item) => ({
-                value: item.id,
-                label: item.name,
-              }))}
+              options={singers.map((item) => ({ value: item.id, label: item.name }))}
               showSearch
               filterOption={(input, option) =>
-                (option.label || '').toLowerCase().indexOf(input.toLowerCase()) >= 0
+                String(option?.label || '').toLowerCase().includes(input.toLowerCase())
               }
             />
           </Form.Item>
@@ -586,52 +598,44 @@ const Song = () => {
           <Form.Item name="categoryId" label="分类">
             <Select
               placeholder="请选择分类"
-              options={categories.map((item) => ({
-                value: item.id,
-                label: item.name,
-              }))}
+              options={categories.map((item) => ({ value: item.id, label: item.name }))}
               allowClear
             />
           </Form.Item>
 
           <Form.Item
             name="language"
-            label="语种"
-            rules={[{ required: true, message: '请选择语种' }]}
+            label="语言"
+            rules={[{ required: true, message: '请选择语言' }]}
           >
-            <Select
-              placeholder="请选择语种"
-              options={languageOptions.filter((item) => item.value !== '')}
-            />
+            <Select placeholder="请选择语言" options={languageOptions} />
           </Form.Item>
 
           <Form.Item name="duration" label="时长(秒)">
             <InputNumber
-              placeholder="上传文件后自动填充"
               min={0}
+              precision={0}
               style={{ width: '100%' }}
+              placeholder="上传媒体后可自动回填"
             />
           </Form.Item>
 
           <Form.Item name="filePath" label="文件路径">
-            <Input placeholder="上传文件后自动填充" readOnly />
+            <Input readOnly placeholder="上传媒体文件后自动回填" />
           </Form.Item>
 
-          <Form.Item name="coverUrl" label="封面URL">
-            <Input placeholder="上传封面后自动填充，或手动填写URL" />
+          <Form.Item name="coverUrl" label="封面地址">
+            <Input placeholder="上传封面后自动回填，也可手动输入 URL" />
           </Form.Item>
 
-          {/* BugA8修复：SongDTO/SongVO 均有 lyricPath 字段（歌词文件路径），
-              表单中缺少此字段，导致管理员无法手动填写或查看歌词路径 */}
           <Form.Item name="lyricPath" label="歌词路径">
-            <Input placeholder="歌词文件路径（可选）" />
+            <Input placeholder="可选，填写歌词文件路径" />
           </Form.Item>
 
           <Form.Item
             name="status"
             label="状态"
             rules={[{ required: true, message: '请选择状态' }]}
-            initialValue={1}
           >
             <Select
               placeholder="请选择状态"
@@ -642,7 +646,7 @@ const Song = () => {
             />
           </Form.Item>
 
-          <Form.Item name="isHot" label="是否热门" initialValue={0}>
+          <Form.Item name="isHot" label="热门歌曲">
             <Select
               options={[
                 { value: 0, label: '否' },
@@ -651,7 +655,7 @@ const Song = () => {
             />
           </Form.Item>
 
-          <Form.Item name="isNew" label="是否新歌" initialValue={0}>
+          <Form.Item name="isNew" label="新歌">
             <Select
               options={[
                 { value: 0, label: '否' },
@@ -662,32 +666,24 @@ const Song = () => {
         </Form>
       </Modal>
 
-      {/* ========== 文件上传弹窗 ========== */}
       <Modal
         title={
           <Space>
             <UploadOutlined />
             <span>
               上传文件
-              {uploadingSong && (
-                <span style={{ color: '#1677ff', marginLeft: 8 }}>
-                  — {uploadingSong.name}
-                </span>
-              )}
+              {uploadingSong ? (
+                <span style={{ color: '#1677ff', marginLeft: 8 }}>《{uploadingSong.name}》</span>
+              ) : null}
             </span>
           </Space>
         }
         open={uploadModalVisible}
-        onCancel={() => {
-          if (uploading) return
-          setUploadModalVisible(false)
-        }}
+        onCancel={closeUploadModal}
+        maskClosable={false}
+        width={600}
         footer={[
-          <Button
-            key="cancel"
-            onClick={() => setUploadModalVisible(false)}
-            disabled={uploading}
-          >
+          <Button key="cancel" onClick={closeUploadModal} disabled={uploading}>
             关闭
           </Button>,
           <Button
@@ -701,18 +697,16 @@ const Song = () => {
             开始上传
           </Button>,
         ]}
-        width={560}
-        maskClosable={false}
       >
-        {/* 媒体文件上传区域 */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ marginBottom: 8, fontWeight: 500 }}>
             <SoundOutlined style={{ marginRight: 6, color: '#1677ff' }} />
-            音视频文件
+            音频或视频文件
             <span style={{ color: '#999', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
-              支持 MP3 / FLAC / WAV / OGG / M4A / MP4（最大 100MB）
+              支持 MP3 / FLAC / WAV / OGG / M4A / MP4 / AVI / MKV / WebM，最大 100MB
             </span>
           </div>
+
           <Upload.Dragger
             accept=".mp3,.flac,.wav,.ogg,.m4a,.mp4,.avi,.mkv,.webm"
             beforeUpload={beforeMediaUpload}
@@ -724,8 +718,8 @@ const Song = () => {
             <p className="ant-upload-drag-icon">
               <UploadOutlined style={{ fontSize: 32 }} />
             </p>
-            <p className="ant-upload-text">点击或拖拽文件到此处</p>
-            <p className="ant-upload-hint">上传后将自动读取并填充歌曲时长</p>
+            <p className="ant-upload-text">点击或拖拽文件到这里</p>
+            <p className="ant-upload-hint">上传后会自动尝试读取媒体时长并回填到歌曲信息。</p>
           </Upload.Dragger>
 
           {uploadProgress > 0 && (
@@ -745,17 +739,17 @@ const Song = () => {
           )}
         </div>
 
-        <Divider style={{ margin: '8px 0 20px' }} />
+        <Divider style={{ margin: '12px 0 20px' }} />
 
-        {/* 封面图上传区域 */}
         <div>
           <div style={{ marginBottom: 8, fontWeight: 500 }}>
             <PictureOutlined style={{ marginRight: 6, color: '#722ed1' }} />
             封面图片
             <span style={{ color: '#999', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
-              支持 JPG / PNG / GIF / WebP（最大 10MB）
+              支持 JPG / JPEG / PNG / GIF / WebP，最大 10MB
             </span>
           </div>
+
           <Upload.Dragger
             accept=".jpg,.jpeg,.png,.gif,.webp"
             beforeUpload={beforeCoverUpload}
@@ -768,7 +762,7 @@ const Song = () => {
             <p className="ant-upload-drag-icon">
               <PictureOutlined style={{ fontSize: 32, color: '#722ed1' }} />
             </p>
-            <p className="ant-upload-text">点击或拖拽封面图到此处</p>
+            <p className="ant-upload-text">点击或拖拽封面图片到这里</p>
           </Upload.Dragger>
 
           {coverProgress > 0 && (
@@ -783,7 +777,7 @@ const Song = () => {
 
           {uploadDone.cover && (
             <div style={{ color: '#52c41a', marginTop: 4 }}>
-              <CheckCircleOutlined /> 封面图上传成功
+              <CheckCircleOutlined /> 封面图片上传成功
             </div>
           )}
         </div>

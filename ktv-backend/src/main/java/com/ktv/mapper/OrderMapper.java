@@ -52,6 +52,8 @@ public interface OrderMapper extends BaseMapper<Order> {
      */
     Order selectActiveOrderByRoomId(@Param("roomId") Long roomId);
 
+    Order selectByIdForUpdate(@Param("orderId") Long orderId);
+
     /**
      * C-1修复：原子结账更新，只有 status=1（消费中）的订单才能被结账
      * 使用 WHERE status=1 条件防止并发结账竞态

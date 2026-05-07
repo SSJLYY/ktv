@@ -1,0 +1,3 @@
+display_name: KTV Project
+short_description: Repo-specific workflow for codereview, bug fixing, contract tracing, and validation in this KTV monorepo.
+default_prompt: Work against the real KTV repository code. Trace issues across ktv-backend, admin-frontend, room-frontend, mapper XML, SQL, and Redis where relevant. Prefer repo-specific validation and continue codereview-style passes until the next concrete issue is exhausted.

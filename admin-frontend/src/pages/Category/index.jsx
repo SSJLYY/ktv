@@ -1,44 +1,44 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  Table,
   Button,
-  Space,
-  Input,
-  Select,
-  Modal,
   Form,
+  Input,
   InputNumber,
-  message,
+  Modal,
   Popconfirm,
+  Select,
+  Space,
+  Table,
   Tag,
+  message,
 } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import {
+  addCategory,
+  deleteCategory,
   getAllCategories,
   getCategoryById,
-  addCategory,
   updateCategory,
-  deleteCategory,
 } from '../../api/category'
 import { useUserStore } from '../../store/userStore'
 
 const Category = () => {
   const userInfo = useUserStore((state) => state.userInfo)
   const isSuperAdmin = userInfo?.role === 'super_admin'
+
   const [loading, setLoading] = useState(false)
   const [dataSource, setDataSource] = useState([])
   const [modalVisible, setModalVisible] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [form] = Form.useForm()
 
-  // 加载分类列表
   const loadCategoryList = async () => {
     try {
       setLoading(true)
       const res = await getAllCategories()
       setDataSource(res.data || [])
     } catch (error) {
-      console.error('加载分类列表失败:', error)
+      console.error('Load category list failed:', error)
     } finally {
       setLoading(false)
     }
@@ -48,58 +48,65 @@ const Category = () => {
     loadCategoryList()
   }, [])
 
-  // 打开新增弹窗
+  const closeModal = () => {
+    setModalVisible(false)
+    setEditingCategory(null)
+    form.resetFields()
+  }
+
   const handleAdd = () => {
     setEditingCategory(null)
     form.resetFields()
+    form.setFieldsValue({
+      sortOrder: 0,
+      status: 1,
+    })
     setModalVisible(true)
   }
 
-  // 打开编辑弹窗
   const handleEdit = async (record) => {
     try {
       const res = await getCategoryById(record.id)
       setEditingCategory(res.data)
-      // BugC1修复：先 resetFields 清空上一次的表单值，再 setFieldsValue 填充
       form.resetFields()
-      form.setFieldsValue(res.data)
+      form.setFieldsValue({
+        ...res.data,
+        sortOrder: res.data?.sortOrder ?? 0,
+        status: res.data?.status ?? 1,
+      })
       setModalVisible(true)
     } catch (error) {
-      console.error('获取分类详情失败:', error)
+      console.error('Load category detail failed:', error)
     }
   }
 
-  // 删除
   const handleDelete = async (id) => {
     try {
       await deleteCategory(id)
-      message.success('删除成功')
-      loadCategoryList()
+      message.success('分类删除成功')
+      await loadCategoryList()
     } catch (error) {
-      console.error('删除失败:', error)
+      console.error('Delete category failed:', error)
     }
   }
 
-  // 提交表单
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields()
-
       if (editingCategory) {
         await updateCategory(editingCategory.id, values)
+        message.success('分类更新成功')
       } else {
         await addCategory(values)
+        message.success('分类创建成功')
       }
-
-      message.success(editingCategory ? '修改成功' : '新增成功')
-      setModalVisible(false)
-      loadCategoryList()
+      closeModal()
+      await loadCategoryList()
     } catch (error) {
-      console.error('提交失败:', error)
+      console.error('Submit category failed:', error)
     }
   }
 
-  // 表格列定义
   const columns = [
     {
       title: 'ID',
@@ -108,27 +115,25 @@ const Category = () => {
       width: 80,
     },
     {
-      title: '分类名',
+      title: '分类名称',
       dataIndex: 'name',
       key: 'name',
-      width: 150,
+      width: 200,
     },
     {
       title: '排序',
-      // BugA2修复：CategoryVO 字段名是 sortOrder，不是 sort
       dataIndex: 'sortOrder',
       key: 'sortOrder',
-      width: 80,
+      width: 100,
+      render: (value) => value ?? 0,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (status) => (
-        <Tag color={status === 1 ? 'success' : 'error'}>
-          {status === 1 ? '启用' : '禁用'}
-        </Tag>
+        <Tag color={status === 1 ? 'success' : 'error'}>{status === 1 ? '启用' : '禁用'}</Tag>
       ),
     },
     {
@@ -138,27 +143,19 @@ const Category = () => {
       render: (_, record) => (
         <Space>
           {isSuperAdmin && (
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            >
+            <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
               编辑
             </Button>
           )}
           {isSuperAdmin && (
             <Popconfirm
-              title="确定删除该分类吗?"
-              description="删除后不可恢复"
+              title="确定删除这个分类吗？"
+              description="删除后不可恢复。"
               onConfirm={() => handleDelete(record.id)}
               okText="确定"
               cancelText="取消"
             >
-              <Button
-                type="link"
-                danger
-                icon={<DeleteOutlined />}
-              >
+              <Button type="link" danger icon={<DeleteOutlined />}>
                 删除
               </Button>
             </Popconfirm>
@@ -170,7 +167,6 @@ const Category = () => {
 
   return (
     <div>
-      {/* 操作按钮 */}
       {isSuperAdmin && (
         <div style={{ marginBottom: 16 }}>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
@@ -179,51 +175,39 @@ const Category = () => {
         </div>
       )}
 
-      {/* 表格 */}
       <Table
+        rowKey="id"
         columns={columns}
         dataSource={dataSource}
-        rowKey="id"
         loading={loading}
         pagination={false}
       />
 
-      {/* 新增/编辑弹窗 */}
       <Modal
         title={editingCategory ? '编辑分类' : '新增分类'}
         open={modalVisible}
         onOk={handleSubmit}
-        onCancel={() => setModalVisible(false)}
+        onCancel={closeModal}
         okText="提交"
         cancelText="取消"
       >
-        <Form
-          form={form}
-          layout="vertical"
-          autoComplete="off"
-        >
+        <Form form={form} layout="vertical" autoComplete="off">
           <Form.Item
             name="name"
-            label="分类名"
-            rules={[{ required: true, message: '请输入分类名' }]}
+            label="分类名称"
+            rules={[{ required: true, message: '请输入分类名称' }]}
           >
-            <Input placeholder="请输入分类名" />
+            <Input placeholder="请输入分类名称" />
           </Form.Item>
 
-          {/* BugA2修复：CategoryDTO 字段名是 sortOrder，不是 sort */}
-          <Form.Item name="sortOrder" label="排序" initialValue={0}>
-            <InputNumber
-              placeholder="数字越小越靠前"
-              min={0}
-              style={{ width: '100%' }}
-            />
+          <Form.Item name="sortOrder" label="排序">
+            <InputNumber min={0} precision={0} style={{ width: '100%' }} />
           </Form.Item>
 
           <Form.Item
             name="status"
             label="状态"
             rules={[{ required: true, message: '请选择状态' }]}
-            initialValue={1}
           >
             <Select
               placeholder="请选择状态"

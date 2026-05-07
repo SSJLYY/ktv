@@ -16,9 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * 歌曲分类服务实现。
- */
 @Service
 @RequiredArgsConstructor
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
@@ -49,12 +46,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createCategory(CategoryDTO categoryDTO) {
-        LambdaQueryWrapper<Category> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Category::getName, categoryDTO.getName());
-        Long count = categoryMapper.selectCount(queryWrapper);
-        if (count != null && count > 0) {
-            throw new BusinessException("分类名称已存在");
-        }
+        assertCategoryNameUnique(categoryDTO.getName(), null);
 
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO, category);
@@ -65,60 +57,79 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
             category.setStatus(1);
         }
 
-        categoryMapper.insert(category);
+        int inserted = categoryMapper.insert(category);
+        if (inserted <= 0) {
+            throw new BusinessException("分类创建失败");
+        }
         return category.getId();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateCategory(Long id, CategoryDTO categoryDTO) {
-        Category existCategory = categoryMapper.selectById(id);
-        if (existCategory == null) {
-            throw new BusinessException("分类不存在");
-        }
-
-        if (categoryDTO.getName() == null) {
-            categoryDTO.setName(existCategory.getName());
-        }
-        if (!existCategory.getName().equals(categoryDTO.getName())) {
-            LambdaQueryWrapper<Category> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(Category::getName, categoryDTO.getName());
-            queryWrapper.ne(Category::getId, id);
-            Long count = categoryMapper.selectCount(queryWrapper);
-            if (count != null && count > 0) {
-                throw new BusinessException("分类名称已存在");
-            }
-        }
+        Category existCategory = loadCategory(id);
+        String targetName = categoryDTO.getName() != null ? categoryDTO.getName() : existCategory.getName();
+        assertCategoryNameUnique(targetName, id);
 
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO, category);
         category.setId(id);
-        return categoryMapper.updateById(category) > 0;
+        if (category.getName() == null) {
+            category.setName(existCategory.getName());
+        }
+        if (category.getSortOrder() == null) {
+            category.setSortOrder(existCategory.getSortOrder());
+        }
+        if (category.getStatus() == null) {
+            category.setStatus(existCategory.getStatus());
+        }
+
+        boolean updated = categoryMapper.updateById(category) > 0;
+        if (!updated) {
+            throw new BusinessException("分类更新失败");
+        }
+        return true;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteCategory(Long id) {
-        Category existCategory = categoryMapper.selectById(id);
-        if (existCategory == null) {
-            throw new BusinessException("分类不存在");
-        }
-
+        Category existCategory = loadCategory(id);
         Long songCount = categoryMapper.countSongsByCategoryId(id);
         if (songCount != null && songCount > 0) {
             throw new BusinessException("该分类下还有歌曲，无法删除");
         }
 
-        return categoryMapper.deleteById(id) > 0;
+        boolean deleted = categoryMapper.deleteById(existCategory.getId()) > 0;
+        if (!deleted) {
+            throw new BusinessException("分类删除失败");
+        }
+        return true;
     }
 
     @Override
     public CategoryVO getCategoryById(Long id) {
+        return convertToVO(loadCategory(id));
+    }
+
+    private Category loadCategory(Long id) {
         Category category = categoryMapper.selectById(id);
         if (category == null) {
             throw new BusinessException("分类不存在");
         }
-        return convertToVO(category);
+        return category;
+    }
+
+    private void assertCategoryNameUnique(String name, Long excludeId) {
+        LambdaQueryWrapper<Category> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Category::getName, name);
+        if (excludeId != null) {
+            queryWrapper.ne(Category::getId, excludeId);
+        }
+        Long count = categoryMapper.selectCount(queryWrapper);
+        if (count != null && count > 0) {
+            throw new BusinessException("分类名称已存在");
+        }
     }
 
     private CategoryVO convertToVO(Category category) {
