@@ -8,7 +8,9 @@ import com.ktv.common.exception.BusinessException;
 import com.ktv.common.util.PinyinUtil;
 import com.ktv.dto.SingerDTO;
 import com.ktv.entity.Singer;
+import com.ktv.entity.Song;
 import com.ktv.mapper.SingerMapper;
+import com.ktv.mapper.SongMapper;
 import com.ktv.service.SingerService;
 import com.ktv.vo.SingerVO;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> implements SingerService {
 
     private final SingerMapper singerMapper;
+    private final SongMapper songMapper;
 
     @Override
     public IPage<SingerVO> getSingerPage(Integer current, Integer size, String name, String region, Integer status) {
@@ -98,8 +101,11 @@ public class SingerServiceImpl extends ServiceImpl<SingerMapper, Singer> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteSinger(Long id) {
-        Singer singer = loadSinger(id);
-        if (singer.getSongCount() != null && singer.getSongCount() > 0) {
+        loadSinger(id);
+        LambdaQueryWrapper<Song> songQueryWrapper = new LambdaQueryWrapper<>();
+        songQueryWrapper.eq(Song::getSingerId, id);
+        Long realSongCount = songMapper.selectCount(songQueryWrapper);
+        if (realSongCount != null && realSongCount > 0) {
             throw new BusinessException("该歌手下还有歌曲，无法删除");
         }
 

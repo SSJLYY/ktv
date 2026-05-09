@@ -97,12 +97,12 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   }, [fetchQueue, orderId, queueVersion])
 
   const handleTop = async (item) => {
-    if (operatingId || !orderId) {
+    if (operatingId || !orderId || list[0]?.id === item.id) {
       return
     }
 
     const confirmed = await Dialog.confirm({
-      content: `确定将《${item.songName}》置顶为下一首吗？`,
+      content: `确定将“${item.songName}”置顶为下一首吗？`,
     })
     if (!confirmed) {
       return
@@ -127,7 +127,7 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
     }
 
     const confirmed = await Dialog.confirm({
-      content: `确定取消《${item.songName}》吗？`,
+      content: `确定取消“${item.songName}”吗？`,
     })
     if (!confirmed) {
       return
@@ -147,7 +147,11 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
   }
 
   if (loading) {
-    return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
+    return (
+      <div className="loading-wrapper">
+        <DotLoading /> 加载中...
+      </div>
+    )
   }
   if (!orderId) {
     return <div className="empty-text">请先加入包厢</div>
@@ -158,58 +162,63 @@ function QueueList({ orderId, queueVersion, bumpQueueVersion }) {
 
   return (
     <div className="queue-list">
-      {list.map((item, index) => (
-        <SwipeAction
-          key={item.id}
-          rightActions={[
-            {
-              key: 'top',
-              text: '置顶',
-              color: '#1677ff',
-              onClick: () => handleTop(item),
-            },
-            {
-              key: 'delete',
-              text: '取消',
-              color: '#ff3141',
-              onClick: () => handleRemove(item),
-            },
-          ]}
-          stopPropagation
-        >
-          <div className={`queue-item ${index === 0 ? 'first-item' : ''}`}>
-            <div className="queue-index">
-              {index === 0 ? (
-                <span className="now-playing-badge">即将播放</span>
-              ) : (
-                <span className="queue-num">{index + 1}</span>
-              )}
+      {list.map((item, index) => {
+        const isFirst = index === 0
+        const rightActions = [
+          !isFirst && {
+            key: 'top',
+            text: '置顶',
+            color: '#1677ff',
+            onClick: () => handleTop(item),
+          },
+          {
+            key: 'delete',
+            text: '取消',
+            color: '#ff3141',
+            onClick: () => handleRemove(item),
+          },
+        ].filter(Boolean)
+
+        return (
+          <SwipeAction
+            key={item.id}
+            rightActions={rightActions}
+            stopPropagation
+          >
+            <div className={`queue-item ${isFirst ? 'first-item' : ''}`}>
+              <div className="queue-index">
+                {isFirst ? (
+                  <span className="now-playing-badge">即将播放</span>
+                ) : (
+                  <span className="queue-num">{index + 1}</span>
+                )}
+              </div>
+              <div className="queue-info">
+                <div className="queue-song-name">{item.songName}</div>
+                <div className="queue-singer-name">{item.singerName}</div>
+              </div>
+              <div className="queue-actions">
+                <button
+                  className="action-btn top-btn"
+                  onClick={() => handleTop(item)}
+                  disabled={operatingId === item.id || isFirst}
+                  title="置顶"
+                >
+                  <UpOutline fontSize={20} />
+                </button>
+                <button
+                  className="action-btn del-btn"
+                  onClick={() => handleRemove(item)}
+                  disabled={operatingId === item.id}
+                  title="取消"
+                >
+                  <CloseCircleOutline fontSize={20} />
+                </button>
+              </div>
             </div>
-            <div className="queue-info">
-              <div className="queue-song-name">{item.songName}</div>
-              <div className="queue-singer-name">{item.singerName}</div>
-            </div>
-            <div className="queue-actions">
-              <button
-                className="action-btn top-btn"
-                onClick={() => handleTop(item)}
-                disabled={operatingId === item.id || index === 0}
-                title="置顶"
-              >
-                <UpOutline fontSize={20} />
-              </button>
-              <button
-                className="action-btn del-btn"
-                onClick={() => handleRemove(item)}
-                disabled={operatingId === item.id}
-                title="取消"
-              >
-                <CloseCircleOutline fontSize={20} />
-              </button>
-            </div>
-          </div>
-        </SwipeAction>
-      ))}
+          </SwipeAction>
+        )
+      })}
     </div>
   )
 }
@@ -271,7 +280,11 @@ function PlayedList({ orderId }) {
   }, [fetchPlayedList, orderId])
 
   if (loading) {
-    return <div className="loading-wrapper"><DotLoading /> 加载中...</div>
+    return (
+      <div className="loading-wrapper">
+        <DotLoading /> 加载中...
+      </div>
+    )
   }
   if (!orderId) {
     return <div className="empty-text">请先加入包厢</div>

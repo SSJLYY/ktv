@@ -83,6 +83,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             room.setMinConsumption(BigDecimal.ZERO);
         }
         normalizeOptionalDescription(room);
+        validateRoomBusinessFields(room);
 
         int inserted = roomMapper.insert(room);
         if (inserted <= 0 || room.getId() == null) {
@@ -96,7 +97,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateRoom(Long id, RoomDTO roomDTO) {
-        Room existRoom = loadRoom(id);
+        Room existRoom = lockRoom(id);
         String targetName = roomDTO.getName() != null
                 ? normalizeRequiredText(roomDTO.getName(), "包厢名称不能为空")
                 : existRoom.getName();
@@ -115,9 +116,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         if (room.getPricePerHour() == null) {
             room.setPricePerHour(existRoom.getPricePerHour());
         }
-        if (room.getStatus() == null) {
-            room.setStatus(existRoom.getStatus());
-        }
+        room.setStatus(existRoom.getStatus());
         if (room.getMinConsumption() == null) {
             room.setMinConsumption(existRoom.getMinConsumption());
         }
@@ -125,6 +124,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             room.setDescription(existRoom.getDescription());
         }
         normalizeOptionalDescription(room);
+        validateRoomBusinessFields(room);
 
         boolean changed = hasRoomCacheRelevantChange(existRoom, room);
         boolean updated = roomMapper.updateById(room) > 0;
@@ -140,9 +140,14 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteRoom(Long id) {
-        Room existRoom = loadRoom(id);
+        Room existRoom = lockRoom(id);
         if (existRoom.getStatus() == null || existRoom.getStatus() != RoomStatusEnum.AVAILABLE.getCode()) {
             throw new BusinessException("仅允许删除状态为空闲的包厢");
+        }
+        Long orderCount = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getRoomId, id));
+        if (orderCount != null && orderCount > 0) {
+            throw new BusinessException("该包厢已存在订单记录，无法删除");
         }
 
         boolean deleted = roomMapper.deleteById(id) > 0;
@@ -157,7 +162,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateRoomStatus(Long id, Integer status) {
-        Room existRoom = loadRoom(id);
+        Room existRoom = lockRoom(id);
         if (status == null
                 || status < RoomStatusEnum.AVAILABLE.getCode()
                 || status > RoomStatusEnum.MAINTENANCE.getCode()) {
@@ -223,6 +228,14 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         return room;
     }
 
+    private Room lockRoom(Long id) {
+        Room room = roomMapper.selectByIdForUpdate(id);
+        if (room == null) {
+            throw new BusinessException("包厢不存在");
+        }
+        return room;
+    }
+
     private void assertRoomNameUnique(String roomName, Long excludeId) {
         LambdaQueryWrapper<Room> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Room::getName, roomName);
@@ -249,6 +262,18 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
     private void normalizeOptionalDescription(Room room) {
         if (room.getDescription() != null) {
             room.setDescription(room.getDescription().trim());
+        }
+    }
+
+    private void validateRoomBusinessFields(Room room) {
+        if (room.getCapacity() == null || room.getCapacity() <= 0) {
+            throw new BusinessException("包厢容纳人数必须大于 0");
+        }
+        if (room.getPricePerHour() == null || room.getPricePerHour().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("每小时价格不能为负数");
+        }
+        if (room.getMinConsumption() != null && room.getMinConsumption().compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("最低消费不能为负数");
         }
     }
 

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ktv.mapper.RoomMapper">
+
+    <select id="selectByIdForUpdate" resultType="com.ktv.entity.Room">
+        SELECT id,
+               name,
+               type,
+               capacity,
+               price_per_hour,
+               min_consumption,
+               status,
+               description,
+               create_time,
+               update_time,
+               deleted
+        FROM t_room
+        WHERE id = #{roomId}
+          AND deleted = 0
+        FOR UPDATE
+    </select>
+
+</mapper>

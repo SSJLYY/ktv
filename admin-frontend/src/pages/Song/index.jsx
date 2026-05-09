@@ -359,6 +359,18 @@ const Song = () => {
     await loadSongList()
   }
 
+  const singerOptions = [...singers]
+  if (
+    editingSong?.singerId
+    && editingSong?.singerName
+    && !singerOptions.some((item) => item.id === editingSong.singerId)
+  ) {
+    singerOptions.unshift({
+      id: editingSong.singerId,
+      name: `${editingSong.singerName}(已禁用)`,
+    })
+  }
+
   const columns = [
     {
       title: 'ID',
@@ -587,7 +599,7 @@ const Song = () => {
           >
             <Select
               placeholder="请选择歌手"
-              options={singers.map((item) => ({ value: item.id, label: item.name }))}
+              options={singerOptions.map((item) => ({ value: item.id, label: item.name }))}
               showSearch
               filterOption={(input, option) =>
                 String(option?.label || '').toLowerCase().includes(input.toLowerCase())

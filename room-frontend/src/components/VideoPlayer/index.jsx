@@ -22,8 +22,9 @@ const getSavedVolume = () => {
 
 const getSavedMuted = () => localStorage.getItem('ktv_muted') === 'true'
 
-export default function VideoPlayer({ playInfo, onClose }) {
+export default function VideoPlayer({ playInfo, visible, onClose }) {
   const orderId = useRoomStore((s) => s.orderId)
+  const bumpQueueVersion = useRoomStore((s) => s.bumpQueueVersion)
   const playerRef = useRef(null)
   const controlsTimerRef = useRef(null)
   const replayTimerRef = useRef(null)
@@ -81,6 +82,7 @@ export default function VideoPlayer({ playInfo, onClose }) {
     }
     try {
       await nextSong(orderId)
+      bumpQueueVersion()
       Toast.show({ content: '已切歌', icon: 'success' })
     } catch {
       // handled by request interceptor
@@ -94,6 +96,7 @@ export default function VideoPlayer({ playInfo, onClose }) {
     setOperating(true)
     try {
       await nextSong(orderId)
+      bumpQueueVersion()
       Toast.show({ content: '已切歌', icon: 'success' })
     } catch {
       // handled by request interceptor
@@ -109,6 +112,7 @@ export default function VideoPlayer({ playInfo, onClose }) {
     setOperating(true)
     try {
       await replaySong(orderId)
+      bumpQueueVersion()
       Toast.show({ content: '已重唱', icon: 'success' })
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
@@ -138,7 +142,10 @@ export default function VideoPlayer({ playInfo, onClose }) {
   }
 
   return (
-    <div className="video-player-fullscreen" onClick={resetControlsTimer}>
+    <div
+      className={`video-player-fullscreen ${visible ? 'visible' : 'hidden'}`}
+      onClick={visible ? resetControlsTimer : undefined}
+    >
       <ReactPlayer
         ref={playerRef}
         url={getStreamUrl(playInfo.songId)}
@@ -168,7 +175,9 @@ export default function VideoPlayer({ playInfo, onClose }) {
         }}
       />
 
-      <div className={`video-controls ${showControls ? 'visible' : 'hidden'}`}>
+      <div
+        className={`video-controls ${visible && showControls ? 'visible' : 'hidden'}`}
+      >
         <div className="video-header">
           <img
             src={getCoverUrl(playInfo.songId)}

@@ -70,6 +70,10 @@ public class HotSongServiceImpl extends ServiceImpl<SongMapper, Song> implements
                 log.warn("热门歌曲 ID 格式错误: {}", tuple.getValue());
             }
         }
+        if (songIds.isEmpty()) {
+            log.warn("Redis 热门榜仅包含无效歌曲 ID，回退到数据库查询");
+            return getHotSongsFromDb(limit);
+        }
 
         List<SongVO> allVos = songMapper.selectVOByIds(songIds);
         Map<Long, SongVO> voMap = allVos.stream()

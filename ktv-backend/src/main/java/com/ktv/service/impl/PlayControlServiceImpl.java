@@ -34,6 +34,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     private static final String PAUSED = "PAUSED";
     private static final String NONE = "NONE";
     private static final long KEY_TTL_HOURS = 24;
+    private static final String ORDER_PLAY_LOCK_PREFIX = "lock:order_play:order:";
 
     private final OrderMapper orderMapper;
     private final OrderSongMapper orderSongMapper;
@@ -44,7 +45,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     @Transactional(rollbackFor = Exception.class)
     public void next(Long orderId) {
         withOrderPlaybackLock(orderId, () -> {
-            assertActiveOrder(orderId);
+            assertActiveOrderForUpdate(orderId);
             log.info("切歌: orderId={}", orderId);
 
             OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
@@ -76,7 +77,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     @Transactional(rollbackFor = Exception.class)
     public void replay(Long orderId) {
         withOrderPlaybackLock(orderId, () -> {
-            assertActiveOrder(orderId);
+            assertActiveOrderForUpdate(orderId);
             log.info("重唱: orderId={}", orderId);
 
             OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
@@ -96,9 +97,10 @@ public class PlayControlServiceImpl implements PlayControlService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void pause(Long orderId) {
         withOrderPlaybackLock(orderId, () -> {
-            assertActiveOrder(orderId);
+            assertActiveOrderForUpdate(orderId);
             log.info("暂停播放: orderId={}", orderId);
 
             OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
@@ -113,9 +115,10 @@ public class PlayControlServiceImpl implements PlayControlService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void resume(Long orderId) {
         withOrderPlaybackLock(orderId, () -> {
-            assertActiveOrder(orderId);
+            assertActiveOrderForUpdate(orderId);
             log.info("继续播放: orderId={}", orderId);
 
             OrderSong currentSong = resolveCurrentPlayingSong(orderId, true);
@@ -160,7 +163,15 @@ public class PlayControlServiceImpl implements PlayControlService {
     }
 
     private void assertActiveOrder(Long orderId) {
-        Order order = orderMapper.selectById(orderId);
+        assertActiveOrder(orderId, false);
+    }
+
+    private void assertActiveOrderForUpdate(Long orderId) {
+        assertActiveOrder(orderId, true);
+    }
+
+    private void assertActiveOrder(Long orderId, boolean forUpdate) {
+        Order order = forUpdate ? orderMapper.selectByIdForUpdate(orderId) : orderMapper.selectById(orderId);
         if (order == null) {
             throw new BusinessException("订单不存在");
         }
@@ -173,24 +184,21 @@ public class PlayControlServiceImpl implements PlayControlService {
 
     private OrderSong resolveCurrentPlayingSong(Long orderId, boolean repairRedisState) {
         String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
-        Long currentOrderSongId = parsePlayingOrderSongId(orderId, playingKey);
-        if (currentOrderSongId != null) {
-            OrderSong song = orderSongMapper.findSongInfoById(currentOrderSongId);
-            if (song != null && orderId.equals(song.getOrderId()) && song.isPlaying()) {
-                return song;
-            }
-        }
+        parsePlayingOrderSongId(orderId, playingKey);
 
-        Long fallbackId = selectCurrentPlayingRecordId(orderId);
-        if (fallbackId == null) {
+        List<OrderSong> playingSongs = listPlayingSongs(orderId);
+        if (playingSongs.isEmpty()) {
             return null;
         }
 
-        OrderSong fallbackSong = orderSongMapper.findSongInfoById(fallbackId);
-        if (fallbackSong != null && repairRedisState) {
-            writePlaybackState(orderId, fallbackSong.getId(), resolveRecoveredPlaybackStatus(orderId));
+        OrderSong currentRecord = playingSongs.get(0);
+        normalizeExtraPlayingSongs(orderId, playingSongs, currentRecord);
+
+        OrderSong currentSong = orderSongMapper.findSongInfoById(currentRecord.getId());
+        if (currentSong != null && repairRedisState) {
+            writePlaybackState(orderId, currentSong.getId(), resolveRecoveredPlaybackStatus(orderId));
         }
-        return fallbackSong;
+        return currentSong;
     }
 
     private String resolveRecoveredPlaybackStatus(Long orderId) {
@@ -198,15 +206,39 @@ public class PlayControlServiceImpl implements PlayControlService {
         return PAUSED.equals(status) ? PAUSED : PLAYING;
     }
 
-    private Long selectCurrentPlayingRecordId(Long orderId) {
-        OrderSong currentSong = orderSongMapper.selectOne(new LambdaQueryWrapper<OrderSong>()
+    private List<OrderSong> listPlayingSongs(Long orderId) {
+        return orderSongMapper.selectList(new LambdaQueryWrapper<OrderSong>()
                 .select(OrderSong::getId, OrderSong::getOrderId, OrderSong::getStatus, OrderSong::getPlayTime)
                 .eq(OrderSong::getOrderId, orderId)
                 .eq(OrderSong::getStatus, OrderSongStatusEnum.PLAYING.getCode())
                 .orderByDesc(OrderSong::getPlayTime)
-                .orderByDesc(OrderSong::getId)
-                .last("LIMIT 1"));
-        return currentSong != null ? currentSong.getId() : null;
+                .orderByDesc(OrderSong::getId));
+    }
+
+    private void normalizeExtraPlayingSongs(Long orderId, List<OrderSong> playingSongs, OrderSong currentRecord) {
+        if (playingSongs.size() <= 1 || currentRecord == null) {
+            return;
+        }
+
+        LocalDateTime finishTimeReference = currentRecord.getPlayTime() != null
+                ? currentRecord.getPlayTime()
+                : LocalDateTime.now();
+        for (int i = 1; i < playingSongs.size(); i++) {
+            OrderSong staleSong = new OrderSong();
+            staleSong.setId(playingSongs.get(i).getId());
+            staleSong.setStatus(OrderSongStatusEnum.PLAYED.getCode());
+            staleSong.setFinishTime(resolveRecoveredFinishTime(playingSongs.get(i).getPlayTime(), finishTimeReference));
+            updateOrderSong(staleSong, "修复异常播放状态失败");
+            log.warn("修复订单播放脏数据: orderId={}, staleOrderSongId={}, keptOrderSongId={}",
+                    orderId, playingSongs.get(i).getId(), currentRecord.getId());
+        }
+    }
+
+    private LocalDateTime resolveRecoveredFinishTime(LocalDateTime stalePlayTime, LocalDateTime finishTimeReference) {
+        if (stalePlayTime != null && stalePlayTime.isAfter(finishTimeReference)) {
+            return stalePlayTime;
+        }
+        return finishTimeReference;
     }
 
     private OrderSong findNextWaitingSong(Long orderId) {
@@ -304,7 +336,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     }
 
     private <T> T withOrderPlaybackLock(Long orderId, Callable<T> action) {
-        String lockKey = "lock:play_control:order:" + orderId;
+        String lockKey = ORDER_PLAY_LOCK_PREFIX + orderId;
         Lock lock = redisLockRegistry.obtain(lockKey);
         boolean locked = false;
         try {

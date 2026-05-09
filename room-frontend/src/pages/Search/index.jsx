@@ -57,24 +57,35 @@ function SearchTab({ orderId, bumpQueueVersion }) {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const timerRef = useRef(null)
+  const searchRequestIdRef = useRef(0)
+  const mountedRef = useRef(true)
 
   const doSearch = async (value) => {
     const trimmed = value.trim()
     if (!trimmed) {
+      searchRequestIdRef.current += 1
       setSongs([])
       setSearched(false)
+      setLoading(false)
       return
     }
 
+    const requestId = searchRequestIdRef.current + 1
+    searchRequestIdRef.current = requestId
     setLoading(true)
     try {
       const res = await searchSongs(trimmed, 1, 50)
+      if (!mountedRef.current || requestId !== searchRequestIdRef.current) {
+        return
+      }
       setSongs(res.data?.records || [])
       setSearched(true)
     } catch {
       // handled by interceptor
     } finally {
-      setLoading(false)
+      if (mountedRef.current && requestId === searchRequestIdRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -90,6 +101,7 @@ function SearchTab({ orderId, bumpQueueVersion }) {
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (timerRef.current) {
         clearTimeout(timerRef.current)
       }
@@ -107,9 +119,11 @@ function SearchTab({ orderId, bumpQueueVersion }) {
             clearTimeout(timerRef.current)
             timerRef.current = null
           }
+          searchRequestIdRef.current += 1
           setKeyword('')
           setSongs([])
           setSearched(false)
+          setLoading(false)
         }}
         style={{
           '--font-size': '16px',

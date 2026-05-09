@@ -83,15 +83,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         LocalDateTime endTime = LocalDateTime.now();
-        long minutes = Duration.between(order.getStartTime(), endTime).toMinutes();
+        long minutes = Duration.between(requireOrderStartTime(order), endTime).toMinutes();
         if (minutes < 1) {
             minutes = 1;
         }
 
-        Room room = roomMapper.selectById(order.getRoomId());
-        if (room == null) {
-            throw new BusinessException("包厢不存在");
-        }
+        Room room = lockRoom(order.getRoomId());
         if (room.getPricePerHour() == null) {
             throw new BusinessException("包厢价格未设置");
         }
@@ -148,11 +145,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         LocalDateTime endTime = LocalDateTime.now();
-        long minutes = Duration.between(order.getStartTime(), endTime).toMinutes();
+        long minutes = Duration.between(requireOrderStartTime(order), endTime).toMinutes();
         if (minutes < 1) {
             minutes = 1;
         }
 
+        lockRoom(order.getRoomId());
         int updated = orderMapper.atomicCancelOrder(orderId, endTime, (int) minutes, cancellerId);
         if (updated == 0) {
             throw new BusinessException("订单状态已变更，取消失败");
@@ -202,10 +200,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     private Long doOpenOrder(OrderOpenDTO openDTO, Long operatorId) {
-        Room room = roomMapper.selectById(openDTO.getRoomId());
-        if (room == null) {
-            throw new BusinessException("包厢不存在");
-        }
+        Room room = lockRoom(openDTO.getRoomId());
         if (room.getStatus() == null || room.getStatus() != RoomStatusEnum.AVAILABLE.getCode()) {
             throw new BusinessException("包厢当前状态不允许开台，请选择空闲包厢");
         }
@@ -246,9 +241,24 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return order.getId();
     }
 
+    private Room lockRoom(Long roomId) {
+        Room room = roomMapper.selectByIdForUpdate(roomId);
+        if (room == null) {
+            throw new BusinessException("包厢不存在");
+        }
+        return room;
+    }
+
     private BigDecimal calculateRoomAmount(BigDecimal pricePerHour, long minutes) {
         BigDecimal hours = BigDecimal.valueOf(minutes).divide(BigDecimal.valueOf(60), 2, RoundingMode.UP);
         return pricePerHour.multiply(hours).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private LocalDateTime requireOrderStartTime(Order order) {
+        if (order.getStartTime() == null) {
+            throw new BusinessException("订单开始时间缺失，无法计算时长");
+        }
+        return order.getStartTime();
     }
 
     private void registerAfterCommit(Runnable task) {

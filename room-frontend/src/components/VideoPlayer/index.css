@@ -11,6 +11,15 @@
   justify-content: center;
 }
 
+.video-player-fullscreen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video-player-fullscreen.visible {
+  opacity: 1;
+}
+
 .video-player-fullscreen video {
   width: 100%;
   height: 100%;

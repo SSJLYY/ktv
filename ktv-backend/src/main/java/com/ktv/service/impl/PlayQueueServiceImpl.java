@@ -36,6 +36,7 @@ import java.util.concurrent.locks.Lock;
 public class PlayQueueServiceImpl implements PlayQueueService {
 
     private static final long QUEUE_EXPIRE_HOURS = 24;
+    private static final String ORDER_PLAY_LOCK_PREFIX = "lock:order_play:order:";
 
     private final OrderMapper orderMapper;
     private final OrderSongMapper orderSongMapper;
@@ -72,6 +73,34 @@ public class PlayQueueServiceImpl implements PlayQueueService {
                     .max(Integer::compareTo)
                     .orElse(0) + 1;
 
+            OrderSong activeOrderSong = orderSongMapper.selectOne(new LambdaQueryWrapper<OrderSong>()
+                    .select(OrderSong::getId)
+                    .eq(OrderSong::getOrderId, orderId)
+                    .eq(OrderSong::getSongId, songId)
+                    .in(OrderSong::getStatus,
+                            OrderSongStatusEnum.WAITING.getCode(),
+                            OrderSongStatusEnum.PLAYING.getCode())
+                    .last("LIMIT 1"));
+            if (activeOrderSong != null) {
+                throw new BusinessException("该歌曲当前订单已点过，不能重复点歌");
+            }
+
+            OrderSong deletedOrderSong = orderSongMapper.findLatestDeletedByOrderIdAndSongId(orderId, songId);
+            if (deletedOrderSong != null) {
+                LocalDateTime now = LocalDateTime.now();
+                if (orderSongMapper.restoreDeletedOrderSong(
+                        deletedOrderSong.getId(),
+                        song.getName(),
+                        song.getSingerName(),
+                        sortOrder,
+                        now) <= 0) {
+                    throw new BusinessException("点歌失败");
+                }
+                registerQueueRefreshAfterCommit(orderId, songId, true);
+                log.info("复用已取消的点歌记录: orderSongId={}, sortOrder={}", deletedOrderSong.getId(), sortOrder);
+                return deletedOrderSong.getId();
+            }
+
             OrderSong orderSong = new OrderSong();
             orderSong.setOrderId(orderId);
             orderSong.setSongId(songId);
@@ -85,8 +114,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
                 throw new BusinessException("点歌失败");
             }
 
-            hotSongService.incrementHotScore(songId);
-            registerQueueRefreshAfterCommit(orderId, true);
+            registerQueueRefreshAfterCommit(orderId, songId, true);
             log.info("点歌成功: orderSongId={}, sortOrder={}", orderSong.getId(), sortOrder);
             return orderSong.getId();
         });
@@ -133,7 +161,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
                 nextSortOrder++;
             }
 
-            registerQueueRefreshAfterCommit(orderId, false);
+            registerQueueRefreshAfterCommit(orderId, null, false);
             log.info("置顶成功: orderSongId={}", orderSongId);
             return null;
         });
@@ -156,12 +184,12 @@ public class PlayQueueServiceImpl implements PlayQueueService {
                 throw new BusinessException("只能取消等待中的歌曲");
             }
 
-            if (orderSongMapper.deleteById(orderSongId) <= 0) {
+            if (orderSongMapper.hardDeleteWaitingSong(orderSongId, orderId) <= 0) {
                 throw new BusinessException("取消点歌失败");
             }
 
             normalizeWaitingSortOrder(orderId);
-            registerQueueRefreshAfterCommit(orderId, false);
+            registerQueueRefreshAfterCommit(orderId, null, false);
             log.info("取消点歌成功: orderSongId={}", orderSongId);
             return null;
         });
@@ -237,8 +265,9 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         }
     }
 
-    private void registerQueueRefreshAfterCommit(Long orderId, boolean autoStartPlayback) {
+    private void registerQueueRefreshAfterCommit(Long orderId, Long hotSongId, boolean autoStartPlayback) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            incrementHotScoreIfNecessary(hotSongId);
             refreshQueueCache(orderId);
             if (autoStartPlayback) {
                 triggerAutoStartPlayback(orderId);
@@ -249,12 +278,19 @@ public class PlayQueueServiceImpl implements PlayQueueService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                incrementHotScoreIfNecessary(hotSongId);
                 refreshQueueCache(orderId);
                 if (autoStartPlayback) {
                     triggerAutoStartPlayback(orderId);
                 }
             }
         });
+    }
+
+    private void incrementHotScoreIfNecessary(Long songId) {
+        if (songId != null) {
+            hotSongService.incrementHotScore(songId);
+        }
     }
 
     private void refreshQueueCache(Long orderId) {
@@ -321,7 +357,7 @@ public class PlayQueueServiceImpl implements PlayQueueService {
     }
 
     private <T> T withQueueMutationLock(Long orderId, Callable<T> action) {
-        String lockKey = "lock:play_queue:order:" + orderId;
+        String lockKey = ORDER_PLAY_LOCK_PREFIX + orderId;
         Lock lock = redisLockRegistry.obtain(lockKey);
         boolean locked = false;
         try {

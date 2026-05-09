@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class MediaServiceImpl implements MediaService {
 
+    private static final String COVER_PATH_PREFIX = "/covers/";
     private static final Pattern WINDOWS_PATH_PATTERN = Pattern.compile("^[A-Za-z]:.*");
 
     private final SongMapper songMapper;
@@ -162,11 +163,12 @@ public class MediaServiceImpl implements MediaService {
         Path basePath = Paths.get(mediaBasePath).normalize().toAbsolutePath();
         Path candidatePath;
 
-        if (WINDOWS_PATH_PATTERN.matcher(normalizedInput).matches()) {
+        if (normalizedInput.startsWith(COVER_PATH_PREFIX)) {
+            candidatePath = basePath.resolve(normalizedInput.substring(1));
+        } else if (WINDOWS_PATH_PATTERN.matcher(normalizedInput).matches() || Paths.get(normalizedInput).isAbsolute()) {
             candidatePath = Paths.get(normalizedInput);
         } else {
-            String relativePart = normalizedInput.startsWith("/") ? normalizedInput.substring(1) : normalizedInput;
-            candidatePath = basePath.resolve(relativePart);
+            candidatePath = basePath.resolve(normalizedInput);
         }
 
         Path normalizedPath = candidatePath.normalize().toAbsolutePath();

@@ -7,11 +7,22 @@ const request = axios.create({
   timeout: 10000,
 })
 
-function shouldResetRoomSession(message) {
+function shouldShowErrorToast(config) {
+  return !config?.skipErrorToast
+}
+
+export function isInactiveRoomOrderMessage(message) {
   if (!message) {
     return false
   }
-  return message.includes('订单不存在') || message.includes('不在进行中')
+
+  return message.includes('订单不存在')
+    || message.includes('当前订单未处于进行中状态')
+    || message.includes('该订单不在进行中')
+}
+
+function shouldResetRoomSession(message) {
+  return isInactiveRoomOrderMessage(message)
 }
 
 function resetRoomSession() {
@@ -40,23 +51,37 @@ request.interceptors.response.use(
       resetRoomSession()
     }
 
-    Toast.show({ icon: 'fail', content: res.message || '请求失败' })
-    return Promise.reject(new Error(res.message || '请求失败'))
+    if (shouldShowErrorToast(response.config)) {
+      Toast.show({ icon: 'fail', content: res.message || '请求失败' })
+    }
+    const businessError = new Error(res.message || '请求失败')
+    businessError.businessMessage = res.message
+    businessError.businessCode = res.code
+    return Promise.reject(businessError)
   },
   (error) => {
     if (error.response) {
       const { status, data } = error.response
       if (status === 401) {
-        Toast.show({ icon: 'fail', content: '登录已过期，请重新登录' })
+        if (shouldShowErrorToast(error.config)) {
+          Toast.show({ icon: 'fail', content: '登录已过期，请重新登录' })
+        }
         localStorage.removeItem('ktv_token')
       } else {
         if (shouldResetRoomSession(data?.message)) {
           resetRoomSession()
         }
-        Toast.show({ icon: 'fail', content: data?.message || '网络错误' })
+        if (shouldShowErrorToast(error.config)) {
+          Toast.show({ icon: 'fail', content: data?.message || '网络错误' })
+        }
       }
+
+      error.businessMessage = data?.message
+      error.businessCode = data?.code
     } else {
-      Toast.show({ icon: 'fail', content: '网络连接失败' })
+      if (shouldShowErrorToast(error.config)) {
+        Toast.show({ icon: 'fail', content: '网络连接失败' })
+      }
     }
 
     return Promise.reject(error)

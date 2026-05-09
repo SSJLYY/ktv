@@ -21,3 +21,23 @@
   border-top: 1px solid var(--adm-border-color);
   background: var(--adm-color-background);
 }
+
+.video-reopen-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 118px;
+  z-index: 101;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(22, 119, 255, 0.92);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(22, 119, 255, 0.28);
+}
+
+.video-reopen-btn:active {
+  background: rgba(9, 88, 217, 0.96);
+}

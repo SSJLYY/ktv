@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { TabBar } from 'antd-mobile'
-import { SearchOutline, UnorderedListOutline } from 'antd-mobile-icons'
+import { SearchOutline, UnorderedListOutline, PlayOutline } from 'antd-mobile-icons'
 import PlayBar from '../components/PlayBar/index'
 import VideoPlayer from '../components/VideoPlayer/index'
 import useRoomStore from '../store/roomStore'
+import { validateActiveRoomOrder } from '../api/room'
 import './MainLayout.css'
 
 const tabs = [
@@ -17,35 +18,96 @@ export default function MainLayout() {
   const location = useLocation()
   const orderId = useRoomStore((s) => s.orderId)
   const hasHydrated = useRoomStore((s) => s.hasHydrated)
+  const clearOrderId = useRoomStore((s) => s.clearOrderId)
   const [videoPlayInfo, setVideoPlayInfo] = useState(null)
+  const [videoVisible, setVideoVisible] = useState(false)
+  const [sessionChecked, setSessionChecked] = useState(false)
 
   useEffect(() => {
     if (!hasHydrated) {
       return
     }
+
+    let cancelled = false
+
     if (!orderId) {
+      setSessionChecked(true)
       navigate('/join', { replace: true })
+      return
     }
-  }, [hasHydrated, orderId, navigate])
+
+    setSessionChecked(false)
+
+    validateActiveRoomOrder(orderId)
+      .then((order) => {
+        if (cancelled) {
+          return
+        }
+        if (!order) {
+          clearOrderId()
+          navigate('/join', { replace: true })
+          return
+        }
+        setSessionChecked(true)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSessionChecked(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasHydrated, orderId, clearOrderId, navigate])
 
   const handleVideoPlay = useCallback((playInfo) => {
+    if (!playInfo?.songId) {
+      setVideoPlayInfo(null)
+      setVideoVisible(false)
+      return
+    }
+    setVideoPlayInfo(playInfo)
+    setVideoVisible(true)
+  }, [])
+
+  const handleVideoUpdate = useCallback((playInfo) => {
+    if (!playInfo?.songId) {
+      setVideoPlayInfo(null)
+      setVideoVisible(false)
+      return
+    }
     setVideoPlayInfo(playInfo)
   }, [])
 
   const handleVideoClose = useCallback(() => {
-    setVideoPlayInfo(null)
+    setVideoVisible(false)
   }, [])
 
-  if (!hasHydrated || !orderId) return null
+  if (!hasHydrated || !orderId || !sessionChecked) return null
 
   return (
     <div className="main-layout">
       <div className="main-content">
         <Outlet />
       </div>
-      <PlayBar onVideoPlay={handleVideoPlay} />
+      <PlayBar onVideoPlay={handleVideoPlay} onVideoUpdate={handleVideoUpdate} />
+      {videoPlayInfo && !videoVisible && (
+        <button
+          className="video-reopen-btn"
+          onClick={() => setVideoVisible(true)}
+          type="button"
+        >
+          <PlayOutline fontSize={18} />
+          <span>继续视频</span>
+        </button>
+      )}
       {videoPlayInfo && (
-        <VideoPlayer playInfo={videoPlayInfo} onClose={handleVideoClose} />
+        <VideoPlayer
+          playInfo={videoPlayInfo}
+          visible={videoVisible}
+          onClose={handleVideoClose}
+        />
       )}
       <div className="tab-bar-wrapper">
         <TabBar

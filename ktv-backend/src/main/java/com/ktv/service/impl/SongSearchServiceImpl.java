@@ -71,7 +71,7 @@ public class SongSearchServiceImpl implements SongSearchService {
             if (normalizedInitial.length() != 1) {
                 throw new BusinessException("歌手首字母筛选条件无效");
             }
-            queryWrapper.eq(Singer::getPinyinInitial, normalizedInitial);
+            queryWrapper.likeRight(Singer::getPinyinInitial, normalizedInitial);
         }
 
         queryWrapper.orderByAsc(Singer::getPinyin);

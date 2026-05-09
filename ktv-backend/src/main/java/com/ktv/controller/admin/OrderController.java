@@ -7,6 +7,7 @@ import com.ktv.common.result.Result;
 import com.ktv.dto.OrderOpenDTO;
 import com.ktv.entity.Order;
 import com.ktv.service.OrderService;
+import com.ktv.util.AdminAccessUtils;
 import com.ktv.vo.OrderVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,11 +39,10 @@ public class OrderController {
     @PostMapping("/open")
     public Result<Long> openOrder(
             @Valid @RequestBody OrderOpenDTO openDTO,
-            @RequestAttribute(name = "userId", required = false) Long userId
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
     ) {
-        if (userId == null) {
-            throw new BusinessException("用户未登录，无法执行此操作");
-        }
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Long orderId = orderService.openOrder(openDTO, userId);
         return Result.success(orderId);
     }
@@ -50,12 +50,11 @@ public class OrderController {
     @PostMapping("/{id}/close")
     public Result<OrderVO> closeOrder(
             @PathVariable("id") Long orderId,
-            @RequestAttribute(name = "userId", required = false) Long userId
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
     ) {
         validatePositiveId(orderId, "订单 ID 必须为正整数");
-        if (userId == null) {
-            throw new BusinessException("用户未登录，无法执行此操作");
-        }
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         OrderVO orderVO = orderService.closeOrder(orderId, userId);
         return Result.success(orderVO);
     }
@@ -94,12 +93,11 @@ public class OrderController {
     @DeleteMapping("/{id}")
     public Result<Boolean> cancelOrder(
             @PathVariable("id") Long orderId,
-            @RequestAttribute(name = "userId", required = false) Long userId
+            @RequestAttribute(name = "userId", required = false) Long userId,
+            @RequestAttribute(name = "role", required = false) String role
     ) {
         validatePositiveId(orderId, "订单 ID 必须为正整数");
-        if (userId == null) {
-            throw new BusinessException("用户未登录，无法执行此操作");
-        }
+        AdminAccessUtils.requireSuperAdmin(userId, role);
         Boolean result = orderService.cancelOrder(orderId, userId);
         return Result.success(result);
     }

@@ -1,5 +1,6 @@
 package com.ktv.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -9,8 +10,12 @@ import com.ktv.common.exception.BusinessException;
 import com.ktv.common.util.PinyinUtil;
 import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.SongDTO;
+import com.ktv.entity.Category;
+import com.ktv.entity.OrderSong;
 import com.ktv.entity.Singer;
 import com.ktv.entity.Song;
+import com.ktv.mapper.CategoryMapper;
+import com.ktv.mapper.OrderSongMapper;
 import com.ktv.mapper.SongMapper;
 import com.ktv.service.SingerService;
 import com.ktv.service.SongService;
@@ -35,7 +40,9 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
     private static final long CACHE_TTL_HOURS = 1;
     private static final int ENABLED_STATUS = 1;
 
+    private final CategoryMapper categoryMapper;
     private final SongMapper songMapper;
+    private final OrderSongMapper orderSongMapper;
     private final SingerService singerService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
@@ -71,11 +78,13 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         String normalizedName = normalizeRequiredText(songDTO.getName(), "歌曲名称不能为空");
         Long singerId = requirePositiveSingerId(songDTO.getSingerId());
         Singer singer = loadEnabledSinger(singerId);
+        Long categoryId = normalizeCategoryId(songDTO.getCategoryId());
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
         song.setName(normalizedName);
         song.setSingerId(singer.getId());
+        song.setCategoryId(categoryId);
         song.setLanguage(normalizeOptionalText(song.getLanguage()));
         song.setFilePath(normalizeOptionalText(song.getFilePath()));
         song.setCoverUrl(normalizeOptionalText(song.getCoverUrl()));
@@ -88,18 +97,28 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         }
         if (song.getDuration() == null) {
             song.setDuration(0);
+        } else if (song.getDuration() < 0) {
+            throw new BusinessException("歌曲时长不能为负数");
         }
         if (song.getIsHot() == null) {
             song.setIsHot(0);
+        } else {
+            validateBinaryFlag(song.getIsHot(), "热门标记");
         }
         if (song.getIsNew() == null) {
             song.setIsNew(1);
+        } else {
+            validateBinaryFlag(song.getIsNew(), "新歌标记");
         }
         if (song.getStatus() == null) {
             song.setStatus(ENABLED_STATUS);
+        } else {
+            validateBinaryFlag(song.getStatus(), "歌曲状态");
         }
         if (song.getPlayCount() == null) {
             song.setPlayCount(0);
+        } else if (song.getPlayCount() < 0) {
+            throw new BusinessException("播放次数不能为负数");
         }
 
         if (songMapper.insert(song) <= 0) {
@@ -125,34 +144,47 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
 
         Long targetSingerId = songDTO.getSingerId() != null ? songDTO.getSingerId() : existSong.getSingerId();
         targetSingerId = requirePositiveSingerId(targetSingerId);
-        Singer newSinger = loadEnabledSinger(targetSingerId);
+        boolean singerChanged = !Objects.equals(existSong.getSingerId(), targetSingerId);
+        Singer targetSinger = singerChanged
+                ? loadEnabledSinger(targetSingerId)
+                : loadExistingSinger(targetSingerId);
+        Long targetCategoryId = songDTO.getCategoryId() != null
+                ? normalizeCategoryId(songDTO.getCategoryId())
+                : existSong.getCategoryId();
 
         Song song = new Song();
         BeanUtils.copyProperties(songDTO, song);
         song.setId(id);
         song.setSingerId(targetSingerId);
-
-        if (song.getCategoryId() == null) {
-            song.setCategoryId(existSong.getCategoryId());
-        }
+        song.setCategoryId(targetCategoryId);
         song.setLanguage(songDTO.getLanguage() != null ? normalizeOptionalText(songDTO.getLanguage()) : existSong.getLanguage());
         if (song.getDuration() == null) {
             song.setDuration(existSong.getDuration());
+        } else if (song.getDuration() < 0) {
+            throw new BusinessException("歌曲时长不能为负数");
         }
         song.setFilePath(songDTO.getFilePath() != null ? normalizeOptionalText(songDTO.getFilePath()) : existSong.getFilePath());
         song.setCoverUrl(songDTO.getCoverUrl() != null ? normalizeOptionalText(songDTO.getCoverUrl()) : existSong.getCoverUrl());
         song.setLyricPath(songDTO.getLyricPath() != null ? normalizeOptionalText(songDTO.getLyricPath()) : existSong.getLyricPath());
         if (song.getIsHot() == null) {
             song.setIsHot(existSong.getIsHot());
+        } else {
+            validateBinaryFlag(song.getIsHot(), "热门标记");
         }
         if (song.getIsNew() == null) {
             song.setIsNew(existSong.getIsNew());
+        } else {
+            validateBinaryFlag(song.getIsNew(), "新歌标记");
         }
         if (song.getStatus() == null) {
             song.setStatus(existSong.getStatus());
+        } else {
+            validateBinaryFlag(song.getStatus(), "歌曲状态");
         }
         if (song.getPlayCount() == null) {
             song.setPlayCount(existSong.getPlayCount());
+        } else if (song.getPlayCount() < 0) {
+            throw new BusinessException("播放次数不能为负数");
         }
 
         if (songDTO.getName() == null || songDTO.getName().isBlank()) {
@@ -174,7 +206,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             song.setLanguage("国语");
         }
 
-        if (!Objects.equals(existSong.getSingerId(), song.getSingerId())) {
+        if (singerChanged) {
             Singer oldSinger = singerService.getById(existSong.getSingerId());
             String oldSingerName = oldSinger != null ? oldSinger.getName() : String.valueOf(existSong.getSingerId());
             log.info(
@@ -182,7 +214,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
                     id,
                     song.getName(),
                     oldSingerName,
-                    newSinger.getName()
+                    targetSinger.getName()
             );
         }
 
@@ -190,7 +222,7 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             throw new BusinessException("歌曲更新失败");
         }
 
-        if (!Objects.equals(existSong.getSingerId(), song.getSingerId())) {
+        if (singerChanged) {
             changeSingerSongCount(existSong.getSingerId(), -1);
             changeSingerSongCount(song.getSingerId(), 1);
         }
@@ -209,6 +241,13 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
         Song song = songMapper.selectById(id);
         if (song == null) {
             throw new BusinessException("歌曲不存在");
+        }
+
+        Long pendingUsageCount = orderSongMapper.selectCount(new LambdaQueryWrapper<OrderSong>()
+                .eq(OrderSong::getSongId, id)
+                .in(OrderSong::getStatus, 0, 1));
+        if (pendingUsageCount != null && pendingUsageCount > 0) {
+            throw new BusinessException("该歌曲仍在待唱或播放中，暂时不能删除");
         }
 
         if (songMapper.deleteById(id) <= 0) {
@@ -307,6 +346,34 @@ public class SongServiceImpl extends ServiceImpl<SongMapper, Song> implements So
             throw new BusinessException("禁用歌手不能关联歌曲");
         }
         return singer;
+    }
+
+    private Singer loadExistingSinger(Long singerId) {
+        Singer singer = singerService.getById(singerId);
+        if (singer == null) {
+            throw new BusinessException("姝屾墜涓嶅瓨鍦?");
+        }
+        return singer;
+    }
+
+    private Long normalizeCategoryId(Long categoryId) {
+        if (categoryId == null) {
+            return null;
+        }
+        if (categoryId <= 0) {
+            throw new BusinessException("分类 ID 必须为正整数");
+        }
+        Category category = categoryMapper.selectById(categoryId);
+        if (category == null) {
+            throw new BusinessException("分类不存在");
+        }
+        return categoryId;
+    }
+
+    private void validateBinaryFlag(Integer value, String fieldName) {
+        if (value != 0 && value != 1) {
+            throw new BusinessException(fieldName + "只能是 0 或 1");
+        }
     }
 
     private String normalizeRequiredText(String value, String message) {

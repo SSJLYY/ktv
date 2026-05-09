@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Input, Toast } from 'antd-mobile'
-import request from '../../api/request'
 import useRoomStore from '../../store/roomStore'
+import { validateActiveRoomOrder } from '../../api/room'
 import './index.css'
 
 export default function Join() {
@@ -11,14 +11,41 @@ export default function Join() {
   const orderId = useRoomStore((state) => state.orderId)
   const hasHydrated = useRoomStore((state) => state.hasHydrated)
   const setOrderId = useRoomStore((state) => state.setOrderId)
+  const clearOrderId = useRoomStore((state) => state.clearOrderId)
   const [orderIdInput, setOrderIdInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingStoredOrder, setCheckingStoredOrder] = useState(false)
 
   useEffect(() => {
-    if (hasHydrated && orderId) {
-      navigate('/search', { replace: true })
+    if (!hasHydrated || !orderId) {
+      return
     }
-  }, [hasHydrated, navigate, orderId])
+
+    let cancelled = false
+    setCheckingStoredOrder(true)
+
+    validateActiveRoomOrder(orderId)
+      .then((order) => {
+        if (cancelled) {
+          return
+        }
+        if (order) {
+          navigate('/search', { replace: true })
+          return
+        }
+        clearOrderId()
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          setCheckingStoredOrder(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasHydrated, orderId, clearOrderId, navigate])
 
   const handleJoin = async () => {
     const parsedOrderId = Number.parseInt(orderIdInput.trim(), 10)
@@ -29,13 +56,8 @@ export default function Join() {
 
     setLoading(true)
     try {
-      const res = await request.get(`/api/room/orders/${parsedOrderId}`)
-      const order = res.data
+      const order = await validateActiveRoomOrder(parsedOrderId)
       if (!order) {
-        Toast.show({ content: '未找到该订单', icon: 'fail' })
-        return
-      }
-      if (order.status !== 1) {
         Toast.show({ content: '该订单当前不在进行中', icon: 'fail' })
         return
       }
@@ -61,6 +83,12 @@ export default function Join() {
       </div>
 
       <div className="join-form">
+        {checkingStoredOrder ? (
+          <div style={{ marginBottom: '12px', color: '#999', textAlign: 'center' }}>
+            正在验证当前包厢状态...
+          </div>
+        ) : null}
+
         <Input
           placeholder="请输入订单号"
           type="number"
@@ -78,7 +106,8 @@ export default function Join() {
           block
           color="primary"
           size="large"
-          loading={loading}
+          loading={loading || checkingStoredOrder}
+          disabled={checkingStoredOrder}
           onClick={handleJoin}
           style={{ '--height': '56px', '--font-size': '18px' }}
         >

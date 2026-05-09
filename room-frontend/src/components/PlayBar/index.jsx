@@ -21,9 +21,10 @@ import {
 import useRoomStore from '../../store/roomStore'
 import './index.css'
 
-export default function PlayBar({ onVideoPlay }) {
+export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
   const orderId = useRoomStore((state) => state.orderId)
   const queueVersion = useRoomStore((state) => state.queueVersion)
+  const bumpQueueVersion = useRoomStore((state) => state.bumpQueueVersion)
   const [playInfo, setPlayInfo] = useState(null)
   const [operating, setOperating] = useState(false)
   const [isVideoMode, setIsVideoMode] = useState(false)
@@ -157,6 +158,7 @@ export default function PlayBar({ onVideoPlay }) {
     ap.on('ended', async () => {
       try {
         await nextSong(orderId)
+        bumpQueueVersion()
         fetchPlayStatus()
       } catch {
         // handled by interceptor
@@ -181,7 +183,13 @@ export default function PlayBar({ onVideoPlay }) {
       }
       destroyPlayer()
     }
-  }, [playInfo?.songId, playInfo?.filePath, orderId, onVideoPlay, destroyPlayer, fetchPlayStatus])
+  }, [playInfo?.songId, playInfo?.filePath, orderId, onVideoPlay, destroyPlayer, fetchPlayStatus, bumpQueueVersion])
+
+  useEffect(() => {
+    if (isVideoMode && playInfo?.songId) {
+      onVideoUpdate?.(playInfo)
+    }
+  }, [isVideoMode, onVideoUpdate, playInfo])
 
   useEffect(() => {
     if (!playerRef.current || !playInfo || isVideoMode) {
@@ -223,6 +231,7 @@ export default function PlayBar({ onVideoPlay }) {
     setOperating(true)
     try {
       await nextSong(orderId)
+      bumpQueueVersion()
       Toast.show({ content: '已切歌', icon: 'success' })
       await fetchPlayStatus()
     } catch {
@@ -239,6 +248,7 @@ export default function PlayBar({ onVideoPlay }) {
     setOperating(true)
     try {
       await replaySong(orderId)
+      bumpQueueVersion()
       Toast.show({ content: '已重唱', icon: 'success' })
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current)
