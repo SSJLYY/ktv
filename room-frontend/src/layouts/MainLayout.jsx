@@ -5,7 +5,7 @@ import { SearchOutline, UnorderedListOutline, PlayOutline } from 'antd-mobile-ic
 import PlayBar from '../components/PlayBar/index'
 import VideoPlayer from '../components/VideoPlayer/index'
 import useRoomStore from '../store/roomStore'
-import { validateActiveRoomOrder } from '../api/room'
+import { getActiveRoomOrderByRoomId, validateActiveRoomOrder } from '../api/room'
 import './MainLayout.css'
 
 const tabs = [
@@ -17,8 +17,10 @@ export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const orderId = useRoomStore((s) => s.orderId)
+  const roomId = useRoomStore((s) => s.roomId)
   const hasHydrated = useRoomStore((s) => s.hasHydrated)
-  const clearOrderId = useRoomStore((s) => s.clearOrderId)
+  const setSession = useRoomStore((s) => s.setSession)
+  const clearSession = useRoomStore((s) => s.clearSession)
   const [videoPlayInfo, setVideoPlayInfo] = useState(null)
   const [videoVisible, setVideoVisible] = useState(false)
   const [sessionChecked, setSessionChecked] = useState(false)
@@ -30,36 +32,65 @@ export default function MainLayout() {
 
     let cancelled = false
 
-    if (!orderId) {
+    const redirectToJoin = () => {
+      clearSession()
       setSessionChecked(true)
       navigate('/join', { replace: true })
-      return
     }
 
-    setSessionChecked(false)
+    const ensureSession = async () => {
+      if (!orderId && !roomId) {
+        redirectToJoin()
+        return
+      }
 
-    validateActiveRoomOrder(orderId)
-      .then((order) => {
-        if (cancelled) {
-          return
+      setSessionChecked(false)
+
+      try {
+        if (orderId) {
+          const activeOrder = await validateActiveRoomOrder(orderId)
+          if (cancelled) {
+            return
+          }
+          if (activeOrder) {
+            setSession({
+              orderId: activeOrder.id ?? orderId,
+              roomId: activeOrder.roomId ?? roomId ?? null,
+            })
+            setSessionChecked(true)
+            return
+          }
         }
-        if (!order) {
-          clearOrderId()
-          navigate('/join', { replace: true })
-          return
+
+        if (roomId) {
+          const activeOrder = await getActiveRoomOrderByRoomId(roomId)
+          if (cancelled) {
+            return
+          }
+          if (activeOrder) {
+            setSession({
+              orderId: activeOrder.id,
+              roomId: activeOrder.roomId ?? roomId,
+            })
+            setSessionChecked(true)
+            return
+          }
         }
-        setSessionChecked(true)
-      })
-      .catch(() => {
+
+        redirectToJoin()
+      } catch {
         if (!cancelled) {
           setSessionChecked(true)
         }
-      })
+      }
+    }
+
+    ensureSession()
 
     return () => {
       cancelled = true
     }
-  }, [hasHydrated, orderId, clearOrderId, navigate])
+  }, [hasHydrated, orderId, roomId, setSession, clearSession, navigate])
 
   const handleVideoPlay = useCallback((playInfo) => {
     if (!playInfo?.songId) {

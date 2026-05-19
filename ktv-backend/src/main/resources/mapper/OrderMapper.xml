@@ -8,6 +8,10 @@
         o.id,
         o.order_no,
         o.room_id,
+        o.room_name_snapshot,
+        o.room_type_snapshot,
+        o.room_price_per_hour_snapshot,
+        o.room_min_consumption_snapshot,
         o.start_time,
         o.end_time,
         o.duration_minutes,
@@ -22,16 +26,12 @@
         o.deleted
     </sql>
 
-    <!-- 分页查询订单列表，并补齐包厢名、操作人姓名、结账人姓名 -->
     <select id="selectOrderPage" resultType="com.ktv.entity.Order">
         SELECT
             <include refid="Base_Column_List"/>,
-            r.name AS room_name,
-            r.type AS room_type,
             su1.real_name AS operator_name,
             su2.real_name AS closer_name
         FROM t_order o
-        LEFT JOIN t_room r ON o.room_id = r.id AND r.deleted = 0
         LEFT JOIN t_sys_user su1 ON o.operator_id = su1.id AND su1.deleted = 0
         LEFT JOIN t_sys_user su2 ON o.closer_id = su2.id AND su2.deleted = 0
         WHERE o.deleted = 0
@@ -50,7 +50,6 @@
         ORDER BY o.create_time DESC
     </select>
 
-    <!-- 查询某一天的订单最大序号，序号从第 12 位开始截取 -->
     <select id="selectMaxSeqByDate" resultType="java.lang.Integer">
         SELECT MAX(CAST(SUBSTRING(order_no, 12, 6) AS SIGNED))
         FROM t_order
@@ -58,12 +57,14 @@
           AND deleted = 0
     </select>
 
-    <!-- 查询包厢当前进行中的订单 -->
-    <select id="selectActiveOrderByRoomId" resultType="com.ktv.entity.Order">
+    <select id="selectActiveOrdersByRoomId" resultType="com.ktv.entity.Order">
         SELECT <include refid="Base_Column_List"/>
         FROM t_order o
-        WHERE o.room_id = #{roomId} AND o.status = 1 AND o.deleted = 0
-        LIMIT 1
+        WHERE o.room_id = #{roomId}
+          AND o.status = 1
+          AND o.deleted = 0
+        ORDER BY o.id DESC
+        LIMIT 2
     </select>
 
     <select id="selectByIdForUpdate" resultType="com.ktv.entity.Order">
@@ -74,7 +75,6 @@
         FOR UPDATE
     </select>
 
-    <!-- 原子结账，只允许消费中的订单更新为已结账 -->
     <update id="atomicCloseOrder">
         UPDATE t_order
         SET end_time = #{endTime},
@@ -89,7 +89,6 @@
           AND deleted = 0
     </update>
 
-    <!-- 原子取消订单，只允许消费中的订单更新为已取消，并记录取消时的审计信息 -->
     <update id="atomicCancelOrder">
         UPDATE t_order
         SET end_time = #{endTime},

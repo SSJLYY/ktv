@@ -133,6 +133,10 @@ CREATE TABLE `t_room` (
 DROP TABLE IF EXISTS `t_order`;
 
 CREATE TABLE `t_order` (
+    `room_name_snapshot` VARCHAR(50) DEFAULT NULL COMMENT 'Room name snapshot at order open time',
+    `room_type_snapshot` VARCHAR(20) DEFAULT NULL COMMENT 'Room type snapshot at order open time',
+    `room_price_per_hour_snapshot` DECIMAL(10,2) DEFAULT NULL COMMENT 'Room hourly price snapshot at order open time',
+    `room_min_consumption_snapshot` DECIMAL(10,2) DEFAULT NULL COMMENT 'Room minimum consumption snapshot at order open time',
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     `order_no` VARCHAR(50) NOT NULL COMMENT '订单编号（如：KT202603300001）',
     `room_id` BIGINT NOT NULL COMMENT '包厢ID',

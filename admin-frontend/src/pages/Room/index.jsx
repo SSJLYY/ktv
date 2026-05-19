@@ -52,6 +52,7 @@ const defaultFilters = {
 }
 
 const formatAmount = (value) => `￥${value ?? 0}`
+const isRoomInUse = (room) => room?.status === 1
 
 const Room = () => {
   const userInfo = useUserStore((state) => state.userInfo)
@@ -314,12 +315,18 @@ const Room = () => {
         cancelText="取消"
       >
         <Form form={form} layout="vertical" autoComplete="off">
+          {isRoomInUse(editingRoom) && (
+            <div style={{ marginBottom: 12, color: '#d46b08' }}>
+              使用中的包厢仅允许更新容纳人数和描述，名称、类型、价格和最低消费已锁定。
+            </div>
+          )}
+
           <Form.Item
             name="name"
             label="包厢名称"
             rules={[{ required: true, message: '请输入包厢名称' }]}
           >
-            <Input placeholder="请输入包厢名称" />
+            <Input placeholder="请输入包厢名称" disabled={isRoomInUse(editingRoom)} />
           </Form.Item>
 
           <Form.Item
@@ -330,6 +337,7 @@ const Room = () => {
             <Select
               placeholder="请选择包厢类型"
               options={roomTypeOptions.filter((item) => item.value)}
+              disabled={isRoomInUse(editingRoom)}
             />
           </Form.Item>
 
@@ -346,7 +354,12 @@ const Room = () => {
             label="每小时价格"
             rules={[{ required: true, message: '请输入每小时价格' }]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            <InputNumber
+              min={0}
+              precision={2}
+              style={{ width: '100%' }}
+              disabled={isRoomInUse(editingRoom)}
+            />
           </Form.Item>
 
           <Form.Item name="minConsumption" label="最低消费">
@@ -355,6 +368,7 @@ const Room = () => {
               precision={2}
               style={{ width: '100%' }}
               placeholder="留空表示不限"
+              disabled={isRoomInUse(editingRoom)}
             />
           </Form.Item>
 

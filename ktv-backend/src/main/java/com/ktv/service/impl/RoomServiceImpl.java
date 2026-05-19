@@ -61,6 +61,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         queryWrapper.eq(Room::getStatus, RoomStatusEnum.AVAILABLE.getCode());
         queryWrapper.orderByAsc(Room::getName);
         return roomMapper.selectList(queryWrapper).stream()
+                .filter(room -> loadUniqueActiveOrderByRoomId(room.getId()) == null)
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
     }
@@ -71,14 +72,13 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         String normalizedName = normalizeRequiredText(roomDTO.getName(), "包厢名称不能为空");
         String normalizedType = normalizeRequiredText(roomDTO.getType(), "包厢类型不能为空");
         assertRoomNameUnique(normalizedName, null);
+        validateCreateStatus(roomDTO.getStatus());
 
         Room room = new Room();
         BeanUtils.copyProperties(roomDTO, room);
         room.setName(normalizedName);
         room.setType(normalizedType);
-        if (room.getStatus() == null) {
-            room.setStatus(RoomStatusEnum.AVAILABLE.getCode());
-        }
+        room.setStatus(resolveInitialRoomStatus(roomDTO.getStatus()));
         if (room.getMinConsumption() == null) {
             room.setMinConsumption(BigDecimal.ZERO);
         }
@@ -125,6 +125,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
         normalizeOptionalDescription(room);
         validateRoomBusinessFields(room);
+        validateUpdatableFieldsWhenInUse(existRoom, room);
 
         boolean changed = hasRoomCacheRelevantChange(existRoom, room);
         boolean updated = roomMapper.updateById(room) > 0;
@@ -172,7 +173,7 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
             return true;
         }
 
-        Order activeOrder = orderMapper.selectActiveOrderByRoomId(id);
+        Order activeOrder = loadUniqueActiveOrderByRoomId(id);
         if (activeOrder != null && status != RoomStatusEnum.IN_USE.getCode()) {
             throw new BusinessException("该包厢存在进行中的订单，不能改为非使用中状态");
         }
@@ -277,6 +278,39 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         }
     }
 
+    private void validateCreateStatus(Integer status) {
+        if (status == null) {
+            return;
+        }
+        if (!isValidRoomStatus(status)) {
+            throw new BusinessException("无效的包厢状态");
+        }
+        if (Objects.equals(status, RoomStatusEnum.IN_USE.getCode())) {
+            throw new BusinessException("新建包厢不能直接设置为使用中");
+        }
+    }
+
+    private Integer resolveInitialRoomStatus(Integer status) {
+        return status == null ? RoomStatusEnum.AVAILABLE.getCode() : status;
+    }
+
+    private void validateUpdatableFieldsWhenInUse(Room existRoom, Room updatedRoom) {
+        if (!existRoom.isInUse()) {
+            return;
+        }
+        if (!Objects.equals(existRoom.getName(), updatedRoom.getName())
+                || !Objects.equals(existRoom.getType(), updatedRoom.getType())
+                || !Objects.equals(existRoom.getPricePerHour(), updatedRoom.getPricePerHour())
+                || !Objects.equals(existRoom.getMinConsumption(), updatedRoom.getMinConsumption())) {
+            throw new BusinessException("使用中的包厢不能修改名称、类型、价格或最低消费");
+        }
+    }
+
+    private boolean isValidRoomStatus(Integer status) {
+        return status >= RoomStatusEnum.AVAILABLE.getCode()
+                && status <= RoomStatusEnum.MAINTENANCE.getCode();
+    }
+
     private boolean hasRoomCacheRelevantChange(Room existRoom, Room updatedRoom) {
         return !Objects.equals(existRoom.getName(), updatedRoom.getName())
                 || !Objects.equals(existRoom.getType(), updatedRoom.getType())
@@ -309,5 +343,18 @@ public class RoomServiceImpl extends ServiceImpl<RoomMapper, Room> implements Ro
         BeanUtils.copyProperties(room, roomVO);
         roomVO.setStatusText(room.getStatusText());
         return roomVO;
+    }
+
+    private Order loadUniqueActiveOrderByRoomId(Long roomId) {
+        List<Order> activeOrders = orderMapper.selectActiveOrdersByRoomId(roomId);
+        if (activeOrders == null || activeOrders.isEmpty()) {
+            return null;
+        }
+        if (activeOrders.size() > 1) {
+            log.error("room {} has multiple active orders: {}", roomId,
+                    activeOrders.stream().map(Order::getId).toList());
+            throw new BusinessException("褰撳墠鍖呭帰瀛樺湪澶氭潯杩涜涓殑璁㈠崟锛岃鍏堝鐞嗘暟鎹紓甯?");
+        }
+        return activeOrders.get(0);
     }
 }

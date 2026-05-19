@@ -24,6 +24,8 @@ public class OrderBasicVO {
      */
     private String orderNo;
 
+    private Long roomId;
+
     /**
      * 订单状态。
      */

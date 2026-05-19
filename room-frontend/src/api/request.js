@@ -17,6 +17,7 @@ export function isInactiveRoomOrderMessage(message) {
   }
 
   return message.includes('订单不存在')
+    || message.includes('未找到该订单')
     || message.includes('当前订单未处于进行中状态')
     || message.includes('该订单不在进行中')
 }

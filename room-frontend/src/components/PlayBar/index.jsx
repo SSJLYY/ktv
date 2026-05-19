@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Toast } from 'antd-mobile'
-import {
-  PlayOutline,
-  StopOutline,
-  RightOutline,
-  AudioFill,
-} from 'antd-mobile-icons'
+import { PlayOutline, StopOutline, RightOutline, AudioFill } from 'antd-mobile-icons'
 import APlayer from 'aplayer'
 import 'aplayer/dist/APlayer.min.css'
 import {
@@ -20,6 +15,9 @@ import {
 } from '../../api/play'
 import useRoomStore from '../../store/roomStore'
 import './index.css'
+
+const canAutoPlay = (playStatus) => playStatus === 'PLAYING'
+const isPauseStatus = (playStatus) => playStatus === 'PAUSED'
 
 export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
   const orderId = useRoomStore((state) => state.orderId)
@@ -136,7 +134,7 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
     const ap = new APlayer({
       container: playerContainerRef.current,
       mini: true,
-      autoplay: playInfo.playStatus === 'PLAYING',
+      autoplay: canAutoPlay(playInfo.playStatus),
       mutex: true,
       loop: false,
       volume: Number.isNaN(savedVolume) ? 0.7 : Math.max(0, Math.min(1, savedVolume)),
@@ -183,7 +181,16 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
       }
       destroyPlayer()
     }
-  }, [playInfo?.songId, playInfo?.filePath, orderId, onVideoPlay, destroyPlayer, fetchPlayStatus, bumpQueueVersion])
+  }, [
+    playInfo?.songId,
+    playInfo?.filePath,
+    playInfo?.playStatus,
+    orderId,
+    onVideoPlay,
+    destroyPlayer,
+    fetchPlayStatus,
+    bumpQueueVersion,
+  ])
 
   useEffect(() => {
     if (isVideoMode && playInfo?.songId) {
@@ -196,9 +203,9 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
       return
     }
 
-    if (playInfo.playStatus === 'PLAYING') {
+    if (canAutoPlay(playInfo.playStatus)) {
       playerRef.current.play().catch(() => {})
-    } else if (playInfo.playStatus === 'PAUSED') {
+    } else if (isPauseStatus(playInfo.playStatus)) {
       playerRef.current.pause()
     }
   }, [playInfo?.playStatus, playInfo, isVideoMode])
@@ -207,12 +214,16 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
     if (operating || !playInfo || !orderId) {
       return
     }
+    if (!canAutoPlay(playInfo.playStatus) && !isPauseStatus(playInfo.playStatus)) {
+      return
+    }
+
     setOperating(true)
     try {
-      if (playInfo.playStatus === 'PLAYING') {
+      if (canAutoPlay(playInfo.playStatus)) {
         await pausePlay(orderId)
         Toast.show({ content: '已暂停', icon: 'success' })
-      } else if (playInfo.playStatus === 'PAUSED') {
+      } else {
         await resumePlay(orderId)
         Toast.show({ content: '继续播放', icon: 'success' })
       }
@@ -271,7 +282,8 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
   const hasSong = Boolean(
     playInfo && playInfo.songId && playInfo.playStatus && playInfo.playStatus !== 'NONE'
   )
-  const isPlaying = playInfo?.playStatus === 'PLAYING'
+  const isPlaying = canAutoPlay(playInfo?.playStatus)
+  const canTogglePause = canAutoPlay(playInfo?.playStatus) || isPauseStatus(playInfo?.playStatus)
 
   return (
     <div className="play-bar">
@@ -308,7 +320,7 @@ export default function PlayBar({ onVideoPlay, onVideoUpdate }) {
             <button
               className={`ctrl-btn play-pause-btn ${isPlaying ? 'is-playing' : ''}`}
               onClick={handleTogglePause}
-              disabled={operating}
+              disabled={operating || !canTogglePause}
               title={isPlaying ? '暂停' : '继续'}
             >
               {isPlaying ? <StopOutline fontSize={30} /> : <PlayOutline fontSize={30} />}

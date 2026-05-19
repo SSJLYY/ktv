@@ -79,6 +79,8 @@ public interface OrderService extends IService<Order> {
      */
     OrderVO getActiveOrderByRoomId(Long roomId);
 
+    OrderBasicVO getActiveOrderBasicByRoomId(Long roomId);
+
     /**
      * S6/S7修复：根据订单ID获取订单基础信息（包厢端加入验证用）
      * S7修复：返回强类型 OrderBasicVO 替代 Map<String,Object>，提供类型安全

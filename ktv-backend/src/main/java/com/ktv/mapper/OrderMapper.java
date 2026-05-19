@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 订单Mapper接口
@@ -50,7 +51,7 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @param roomId 包厢ID
      * @return 进行中的订单（无则返回null）
      */
-    Order selectActiveOrderByRoomId(@Param("roomId") Long roomId);
+    List<Order> selectActiveOrdersByRoomId(@Param("roomId") Long roomId);
 
     Order selectByIdForUpdate(@Param("orderId") Long orderId);
 

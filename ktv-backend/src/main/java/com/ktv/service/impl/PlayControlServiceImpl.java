@@ -33,6 +33,7 @@ public class PlayControlServiceImpl implements PlayControlService {
     private static final String PLAYING = "PLAYING";
     private static final String PAUSED = "PAUSED";
     private static final String NONE = "NONE";
+    private static final String UNKNOWN = "UNKNOWN";
     private static final long KEY_TTL_HOURS = 24;
     private static final String ORDER_PLAY_LOCK_PREFIX = "lock:order_play:order:";
 
@@ -143,9 +144,7 @@ public class PlayControlServiceImpl implements PlayControlService {
             clearCurrentPlaybackState(orderId);
             vo.setPlayStatus(NONE);
         } else {
-            String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
-            String playStatus = redisTemplate.opsForValue().get(statusKey);
-            vo.setPlayStatus(playStatus != null ? playStatus : PLAYING);
+            vo.setPlayStatus(resolveCurrentSongPlaybackStatus(orderId));
             vo.setOrderSongId(currentSong.getId());
             vo.setSongId(currentSong.getSongId());
             vo.setSongName(currentSong.getSongName());
@@ -196,14 +195,31 @@ public class PlayControlServiceImpl implements PlayControlService {
 
         OrderSong currentSong = orderSongMapper.findSongInfoById(currentRecord.getId());
         if (currentSong != null && repairRedisState) {
-            writePlaybackState(orderId, currentSong.getId(), resolveRecoveredPlaybackStatus(orderId));
+            repairPlaybackState(orderId, currentSong.getId());
         }
         return currentSong;
     }
 
-    private String resolveRecoveredPlaybackStatus(Long orderId) {
+    private String resolveCurrentSongPlaybackStatus(Long orderId) {
         String status = redisTemplate.opsForValue().get(RedisKeyConstants.buildPlayStatusKey(orderId));
-        return PAUSED.equals(status) ? PAUSED : PLAYING;
+        if (PLAYING.equals(status) || PAUSED.equals(status)) {
+            return status;
+        }
+        return UNKNOWN;
+    }
+
+    private void repairPlaybackState(Long orderId, Long orderSongId) {
+        String playingKey = RedisKeyConstants.buildPlayingKey(orderId);
+        String statusKey = RedisKeyConstants.buildPlayStatusKey(orderId);
+        String status = resolveCurrentSongPlaybackStatus(orderId);
+
+        redisTemplate.opsForValue().set(playingKey, String.valueOf(orderSongId), KEY_TTL_HOURS, TimeUnit.HOURS);
+        if (UNKNOWN.equals(status)) {
+            redisTemplate.delete(statusKey);
+            return;
+        }
+
+        redisTemplate.opsForValue().set(statusKey, status, KEY_TTL_HOURS, TimeUnit.HOURS);
     }
 
     private List<OrderSong> listPlayingSongs(Long orderId) {
@@ -268,22 +284,35 @@ public class PlayControlServiceImpl implements PlayControlService {
 
     private void registerPlaybackStateRefresh(Long orderId, Long orderSongId, String status, boolean refreshQueue) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            writePlaybackState(orderId, orderSongId, status);
-            if (refreshQueue) {
-                refreshQueueCache(orderId);
-            }
+            refreshPlaybackSideEffects(orderId, orderSongId, status, refreshQueue);
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                writePlaybackState(orderId, orderSongId, status);
-                if (refreshQueue) {
-                    refreshQueueCache(orderId);
-                }
+                refreshPlaybackSideEffects(orderId, orderSongId, status, refreshQueue);
             }
         });
+    }
+
+    private void refreshPlaybackSideEffects(Long orderId, Long orderSongId, String status, boolean refreshQueue) {
+        try {
+            writePlaybackState(orderId, orderSongId, status);
+        } catch (Exception e) {
+            log.warn("鍒锋柊鎾斁鐘舵€佺紦瀛樺け璐? orderId={}, orderSongId={}, status={}, error={}",
+                    orderId, orderSongId, status, e.getMessage(), e);
+        }
+
+        if (!refreshQueue) {
+            return;
+        }
+
+        try {
+            refreshQueueCache(orderId);
+        } catch (Exception e) {
+            log.warn("鍒锋柊鎺掗槦缂撳瓨澶辫触: orderId={}, error={}", orderId, e.getMessage(), e);
+        }
     }
 
     private void writePlaybackState(Long orderId, Long orderSongId, String status) {

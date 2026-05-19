@@ -26,6 +26,19 @@ public class RoomOrderController {
 
     private final OrderService orderService;
 
+    @GetMapping("/room/{roomId}/active")
+    @RateLimit(maxRequests = 10, windowSeconds = 60, message = "璇锋眰杩囦簬棰戠箒锛岃绋嶅悗鍐嶈瘯")
+    public Result<OrderBasicVO> getActiveOrderByRoomId(@PathVariable Long roomId, HttpServletRequest request) {
+        if (roomId == null || roomId <= 0) {
+            throw new BusinessException("鍖呭帰 ID 蹇呴』涓烘鏁存暟");
+        }
+
+        String clientIp = ClientIpUtils.getClientIp(request);
+        log.info("鍖呭帰绔煡璇㈠綋鍓嶈繘琛屼腑璁㈠崟 roomId={}, ip={}", roomId, clientIp);
+
+        return Result.success(orderService.getActiveOrderBasicByRoomId(roomId));
+    }
+
     @GetMapping("/{orderId}")
     @RateLimit(maxRequests = 10, windowSeconds = 60, message = "请求过于频繁，请稍后再试")
     public Result<OrderBasicVO> getOrderInfo(@PathVariable Long orderId, HttpServletRequest request) {

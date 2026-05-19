@@ -3,13 +3,16 @@ import request, { isInactiveRoomOrderMessage } from './request'
 export const getRoomOrder = (orderId) =>
   request.get(`/api/room/orders/${orderId}`, { skipErrorToast: true })
 
-export const validateActiveRoomOrder = async (orderId) => {
-  if (!Number.isInteger(orderId) || orderId <= 0) {
+export const getActiveOrderByRoomId = (roomId) =>
+  request.get(`/api/room/orders/room/${roomId}/active`, { skipErrorToast: true })
+
+async function resolveActiveOrder(requester, value) {
+  if (!Number.isInteger(value) || value <= 0) {
     return null
   }
 
   try {
-    const res = await getRoomOrder(orderId)
+    const res = await requester(value)
     const order = res?.data
     if (!order || order.status !== 1) {
       return null
@@ -24,3 +27,9 @@ export const validateActiveRoomOrder = async (orderId) => {
     throw error
   }
 }
+
+export const validateActiveRoomOrder = (orderId) =>
+  resolveActiveOrder(getRoomOrder, orderId)
+
+export const getActiveRoomOrderByRoomId = (roomId) =>
+  resolveActiveOrder(getActiveOrderByRoomId, roomId)

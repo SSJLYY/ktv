@@ -64,6 +64,18 @@ public class Order extends BaseEntity {
     @TableField("total_amount")
     private BigDecimal totalAmount;
 
+    @TableField("room_name_snapshot")
+    private String roomNameSnapshot;
+
+    @TableField("room_type_snapshot")
+    private String roomTypeSnapshot;
+
+    @TableField("room_price_per_hour_snapshot")
+    private BigDecimal roomPricePerHourSnapshot;
+
+    @TableField("room_min_consumption_snapshot")
+    private BigDecimal roomMinConsumptionSnapshot;
+
     /**
      * 状态：1 消费中，2 已结账，3 已取消。
      */

@@ -2,50 +2,77 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Input, Toast } from 'antd-mobile'
 import useRoomStore from '../../store/roomStore'
-import { validateActiveRoomOrder } from '../../api/room'
+import { getActiveRoomOrderByRoomId, validateActiveRoomOrder } from '../../api/room'
 import './index.css'
 
 export default function Join() {
   const isDev = import.meta.env.DEV
   const navigate = useNavigate()
   const orderId = useRoomStore((state) => state.orderId)
+  const roomId = useRoomStore((state) => state.roomId)
   const hasHydrated = useRoomStore((state) => state.hasHydrated)
-  const setOrderId = useRoomStore((state) => state.setOrderId)
-  const clearOrderId = useRoomStore((state) => state.clearOrderId)
+  const setSession = useRoomStore((state) => state.setSession)
+  const clearSession = useRoomStore((state) => state.clearSession)
   const [orderIdInput, setOrderIdInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkingStoredOrder, setCheckingStoredOrder] = useState(false)
 
   useEffect(() => {
-    if (!hasHydrated || !orderId) {
+    if (!hasHydrated || (!orderId && !roomId)) {
       return
     }
 
     let cancelled = false
     setCheckingStoredOrder(true)
 
-    validateActiveRoomOrder(orderId)
-      .then((order) => {
-        if (cancelled) {
-          return
+    const restoreSession = async () => {
+      try {
+        if (orderId) {
+          const activeOrder = await validateActiveRoomOrder(orderId)
+          if (cancelled) {
+            return
+          }
+          if (activeOrder) {
+            setSession({
+              orderId: activeOrder.id ?? orderId,
+              roomId: activeOrder.roomId ?? roomId ?? null,
+            })
+            navigate('/search', { replace: true })
+            return
+          }
         }
-        if (order) {
-          navigate('/search', { replace: true })
-          return
+
+        if (roomId) {
+          const activeOrder = await getActiveRoomOrderByRoomId(roomId)
+          if (cancelled) {
+            return
+          }
+          if (activeOrder) {
+            setSession({
+              orderId: activeOrder.id,
+              roomId: activeOrder.roomId ?? roomId,
+            })
+            navigate('/search', { replace: true })
+            return
+          }
         }
-        clearOrderId()
-      })
-      .catch(() => {})
-      .finally(() => {
+
+        clearSession()
+      } catch {
+        // handled by interceptor
+      } finally {
         if (!cancelled) {
           setCheckingStoredOrder(false)
         }
-      })
+      }
+    }
+
+    restoreSession()
 
     return () => {
       cancelled = true
     }
-  }, [hasHydrated, orderId, clearOrderId, navigate])
+  }, [hasHydrated, orderId, roomId, setSession, clearSession, navigate])
 
   const handleJoin = async () => {
     const parsedOrderId = Number.parseInt(orderIdInput.trim(), 10)
@@ -62,7 +89,10 @@ export default function Join() {
         return
       }
 
-      setOrderId(parsedOrderId)
+      setSession({
+        orderId: order.id ?? parsedOrderId,
+        roomId: order.roomId ?? null,
+      })
       Toast.show({
         content: `已加入包厢：${order.roomName || parsedOrderId}`,
         icon: 'success',

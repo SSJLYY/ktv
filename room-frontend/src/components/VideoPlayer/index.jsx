@@ -14,6 +14,9 @@ import './index.css'
 
 const getStreamUrl = (songId) => `/api/media/stream/${songId}`
 const getCoverUrl = (songId) => `/api/media/cover/${songId}`
+const shouldPlay = (playStatus) => playStatus === 'PLAYING'
+const isKnownPlayStatus = (playStatus) => playStatus === 'PLAYING' || playStatus === 'PAUSED'
+const resolvePlayingState = (playStatus) => shouldPlay(playStatus)
 
 const getSavedVolume = () => {
   const savedVolume = parseFloat(localStorage.getItem('ktv_volume') || '0.7')
@@ -29,8 +32,9 @@ export default function VideoPlayer({ playInfo, visible, onClose }) {
   const controlsTimerRef = useRef(null)
   const replayTimerRef = useRef(null)
   const isMutedRef = useRef(getSavedMuted())
+  const previousSongIdRef = useRef(playInfo?.songId ?? null)
 
-  const [playing, setPlaying] = useState(playInfo?.playStatus !== 'PAUSED')
+  const [playing, setPlaying] = useState(resolvePlayingState(playInfo?.playStatus))
   const [operating, setOperating] = useState(false)
   const [showControls, setShowControls] = useState(true)
   const [isMuted, setIsMuted] = useState(getSavedMuted)
@@ -51,10 +55,15 @@ export default function VideoPlayer({ playInfo, visible, onClose }) {
 
   useEffect(() => {
     if (!playInfo?.songId) {
+      previousSongIdRef.current = null
       return
     }
 
-    setPlaying(playInfo.playStatus !== 'PAUSED')
+    const songChanged = previousSongIdRef.current !== playInfo.songId
+    previousSongIdRef.current = playInfo.songId
+    if (songChanged || isKnownPlayStatus(playInfo.playStatus)) {
+      setPlaying(resolvePlayingState(playInfo.playStatus))
+    }
     resetControlsTimer()
 
     return () => {
@@ -70,10 +79,10 @@ export default function VideoPlayer({ playInfo, visible, onClose }) {
   }, [playInfo?.songId, playInfo?.playStatus])
 
   useEffect(() => {
-    if (!playInfo) {
+    if (!playInfo || !isKnownPlayStatus(playInfo.playStatus)) {
       return
     }
-    setPlaying(playInfo.playStatus !== 'PAUSED')
+    setPlaying(resolvePlayingState(playInfo.playStatus))
   }, [playInfo?.playStatus, playInfo])
 
   const handleEnd = async () => {
@@ -175,9 +184,7 @@ export default function VideoPlayer({ playInfo, visible, onClose }) {
         }}
       />
 
-      <div
-        className={`video-controls ${visible && showControls ? 'visible' : 'hidden'}`}
-      >
+      <div className={`video-controls ${visible && showControls ? 'visible' : 'hidden'}`}>
         <div className="video-header">
           <img
             src={getCoverUrl(playInfo.songId)}

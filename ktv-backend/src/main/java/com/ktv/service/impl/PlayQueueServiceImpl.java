@@ -267,24 +267,34 @@ public class PlayQueueServiceImpl implements PlayQueueService {
 
     private void registerQueueRefreshAfterCommit(Long orderId, Long hotSongId, boolean autoStartPlayback) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            incrementHotScoreIfNecessary(hotSongId);
-            refreshQueueCache(orderId);
-            if (autoStartPlayback) {
-                triggerAutoStartPlayback(orderId);
-            }
+            runQueueRefreshSideEffects(orderId, hotSongId, autoStartPlayback);
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                incrementHotScoreIfNecessary(hotSongId);
-                refreshQueueCache(orderId);
-                if (autoStartPlayback) {
-                    triggerAutoStartPlayback(orderId);
-                }
+                runQueueRefreshSideEffects(orderId, hotSongId, autoStartPlayback);
             }
         });
+    }
+
+    private void runQueueRefreshSideEffects(Long orderId, Long hotSongId, boolean autoStartPlayback) {
+        try {
+            incrementHotScoreIfNecessary(hotSongId);
+        } catch (Exception e) {
+            log.warn("鏇存柊鐑瓕鐑害澶辫触: orderId={}, songId={}, error={}", orderId, hotSongId, e.getMessage(), e);
+        }
+
+        try {
+            refreshQueueCache(orderId);
+        } catch (Exception e) {
+            log.warn("鍒锋柊鐐规瓕闃熷垪缂撳瓨澶辫触: orderId={}, error={}", orderId, e.getMessage(), e);
+        }
+
+        if (autoStartPlayback) {
+            triggerAutoStartPlayback(orderId);
+        }
     }
 
     private void incrementHotScoreIfNecessary(Long songId) {

@@ -1,17 +1,21 @@
 package com.ktv.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ktv.common.enums.OrderSongStatusEnum;
 import com.ktv.common.enums.OrderStatusEnum;
 import com.ktv.common.enums.RoomStatusEnum;
 import com.ktv.common.exception.BusinessException;
 import com.ktv.constant.RedisKeyConstants;
 import com.ktv.dto.OrderOpenDTO;
 import com.ktv.entity.Order;
+import com.ktv.entity.OrderSong;
 import com.ktv.entity.Room;
 import com.ktv.entity.SysUser;
 import com.ktv.mapper.OrderMapper;
+import com.ktv.mapper.OrderSongMapper;
 import com.ktv.mapper.RoomMapper;
 import com.ktv.mapper.SysUserMapper;
 import com.ktv.service.OrderService;
@@ -33,6 +37,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 
@@ -44,6 +49,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private static final long ORDER_KEY_TTL_HOURS = 24;
 
     private final OrderMapper orderMapper;
+    private final OrderSongMapper orderSongMapper;
     private final RoomMapper roomMapper;
     private final SysUserMapper sysUserMapper;
     private final RoomService roomService;
@@ -58,7 +64,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         Lock lock = redisLockRegistry.obtain(lockKey);
         try {
             if (!lock.tryLock(10, TimeUnit.SECONDS)) {
-                throw new BusinessException("操作繁忙，请稍后重试");
+                throw new BusinessException("Operation busy, please retry");
             }
             try {
                 return doOpenOrder(openDTO, operatorId);
@@ -67,7 +73,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new BusinessException("开台操作被中断，请重试");
+            throw new BusinessException("Open order interrupted, please retry");
         }
     }
 
@@ -76,10 +82,10 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public OrderVO closeOrder(Long orderId, Long closerId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
-            throw new BusinessException("订单不存在");
+            throw new BusinessException("Order not found");
         }
         if (order.getStatus() == null || order.getStatus() != OrderStatusEnum.CONSUMING.getCode()) {
-            throw new BusinessException("订单状态不允许结账");
+            throw new BusinessException("Order status does not allow closing");
         }
 
         LocalDateTime endTime = LocalDateTime.now();
@@ -89,29 +95,25 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         Room room = lockRoom(order.getRoomId());
-        if (room.getPricePerHour() == null) {
-            throw new BusinessException("包厢价格未设置");
-        }
-
-        BigDecimal roomAmount = calculateRoomAmount(room.getPricePerHour(), minutes);
-        BigDecimal minConsumption = room.getMinConsumption() != null
-                ? room.getMinConsumption().setScale(2, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal roomPricePerHour = resolveRoomPricePerHour(order, room);
+        BigDecimal minConsumption = resolveRoomMinConsumption(order, room);
+        BigDecimal roomAmount = calculateRoomAmount(roomPricePerHour, minutes);
         BigDecimal totalAmount = roomAmount.max(minConsumption);
 
         int updated = orderMapper.atomicCloseOrder(orderId, endTime, (int) minutes, roomAmount, totalAmount, closerId);
         if (updated == 0) {
-            throw new BusinessException("订单状态已变更，结账失败");
+            throw new BusinessException("Order status changed, close failed");
         }
 
+        markUnfinishedSongsAsSkipped(orderId, endTime);
         roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.CLEANING.getCode());
         registerAfterCommit(() -> {
-            redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
+            clearCurrentOrderRoomKey(order.getRoomId());
             clearPlaybackKeys(orderId);
         });
 
         Order updatedOrder = orderMapper.selectById(orderId);
-        log.info("结账成功: orderNo={}, durationMinutes={}, totalAmount={}",
+        log.info("close order success: orderNo={}, durationMinutes={}, totalAmount={}",
                 updatedOrder.getOrderNo(), minutes, totalAmount);
         return convertToVO(updatedOrder);
     }
@@ -128,7 +130,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public OrderVO getOrderById(Long orderId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
-            throw new BusinessException("订单不存在");
+            throw new BusinessException("Order not found");
         }
         return convertToVO(order);
     }
@@ -138,10 +140,10 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     public Boolean cancelOrder(Long orderId, Long cancellerId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
-            throw new BusinessException("订单不存在");
+            throw new BusinessException("Order not found");
         }
         if (order.getStatus() == null || order.getStatus() != OrderStatusEnum.CONSUMING.getCode()) {
-            throw new BusinessException("只有进行中的订单才能取消");
+            throw new BusinessException("Only active orders can be cancelled");
         }
 
         LocalDateTime endTime = LocalDateTime.now();
@@ -153,61 +155,53 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         lockRoom(order.getRoomId());
         int updated = orderMapper.atomicCancelOrder(orderId, endTime, (int) minutes, cancellerId);
         if (updated == 0) {
-            throw new BusinessException("订单状态已变更，取消失败");
+            throw new BusinessException("Order status changed, cancel failed");
         }
 
+        markUnfinishedSongsAsSkipped(orderId, endTime);
         roomService.updateRoomStatus(order.getRoomId(), RoomStatusEnum.AVAILABLE.getCode());
         registerAfterCommit(() -> {
-            redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(order.getRoomId()));
+            clearCurrentOrderRoomKey(order.getRoomId());
             clearPlaybackKeys(orderId);
         });
-        log.info("订单已取消: orderNo={}, durationMinutes={}, cancellerId={}",
+        log.info("cancel order success: orderNo={}, durationMinutes={}, cancellerId={}",
                 order.getOrderNo(), minutes, cancellerId);
         return true;
     }
 
     @Override
     public OrderVO getActiveOrderByRoomId(Long roomId) {
-        Order order = orderMapper.selectActiveOrderByRoomId(roomId);
+        Order order = getSingleActiveOrderByRoomId(roomId);
         return order != null ? convertToVO(order) : null;
+    }
+
+    @Override
+    public OrderBasicVO getActiveOrderBasicByRoomId(Long roomId) {
+        Order order = getSingleActiveOrderByRoomId(roomId);
+        return order != null ? convertToBasicVO(order) : null;
     }
 
     @Override
     public OrderBasicVO getOrderBasicInfo(Long orderId) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
-            throw new BusinessException("未找到该订单");
+            throw new BusinessException("Order not found");
         }
         if (!order.isActive()) {
-            throw new BusinessException("当前订单未处于进行中状态");
+            throw new BusinessException("Current order is not active");
         }
-
-        String roomName = null;
-        if (order.getRoomId() != null) {
-            Room room = roomMapper.selectById(order.getRoomId());
-            if (room != null) {
-                roomName = room.getName();
-            }
-        }
-
-        return OrderBasicVO.builder()
-                .id(order.getId())
-                .orderNo(order.getOrderNo())
-                .status(order.getStatus())
-                .statusText(order.getStatusText())
-                .roomName(roomName)
-                .build();
+        return convertToBasicVO(order);
     }
 
     private Long doOpenOrder(OrderOpenDTO openDTO, Long operatorId) {
         Room room = lockRoom(openDTO.getRoomId());
         if (room.getStatus() == null || room.getStatus() != RoomStatusEnum.AVAILABLE.getCode()) {
-            throw new BusinessException("包厢当前状态不允许开台，请选择空闲包厢");
+            throw new BusinessException("Room is not available for opening");
         }
 
-        Order activeOrder = orderMapper.selectActiveOrderByRoomId(openDTO.getRoomId());
+        Order activeOrder = getSingleActiveOrderByRoomId(openDTO.getRoomId());
         if (activeOrder != null) {
-            throw new BusinessException("该包厢已有进行中的订单");
+            throw new BusinessException("This room already has an active order");
         }
 
         Order order = new Order();
@@ -219,32 +213,53 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setRemark(openDTO.getRemark());
         order.setRoomAmount(BigDecimal.ZERO);
         order.setTotalAmount(BigDecimal.ZERO);
+        order.setRoomNameSnapshot(room.getName());
+        order.setRoomTypeSnapshot(room.getType());
+        order.setRoomPricePerHourSnapshot(room.getPricePerHour());
+        order.setRoomMinConsumptionSnapshot(room.getMinConsumption());
 
         int inserted = orderMapper.insert(order);
         if (inserted <= 0 || order.getId() == null) {
-            throw new BusinessException("开台失败");
+            throw new BusinessException("Open order failed");
         }
 
         roomService.updateRoomStatus(openDTO.getRoomId(), RoomStatusEnum.IN_USE.getCode());
         registerAfterCommit(() -> {
             clearPlaybackKeys(order.getId());
-            redisTemplate.opsForValue().set(
-                    RedisKeyConstants.buildCurrentOrderRoomKey(openDTO.getRoomId()),
-                    String.valueOf(order.getId()),
-                    ORDER_KEY_TTL_HOURS,
-                    TimeUnit.HOURS
-            );
+            try {
+                redisTemplate.opsForValue().set(
+                        RedisKeyConstants.buildCurrentOrderRoomKey(openDTO.getRoomId()),
+                        String.valueOf(order.getId()),
+                        ORDER_KEY_TTL_HOURS,
+                        TimeUnit.HOURS
+                );
+            } catch (Exception e) {
+                log.warn("write current order cache failed for room {}: {}", openDTO.getRoomId(), e.getMessage());
+            }
         });
 
-        log.info("开台成功: orderNo={}, roomId={}, operatorId={}",
+        log.info("open order success: orderNo={}, roomId={}, operatorId={}",
                 order.getOrderNo(), openDTO.getRoomId(), operatorId);
         return order.getId();
+    }
+
+    private Order getSingleActiveOrderByRoomId(Long roomId) {
+        List<Order> activeOrders = orderMapper.selectActiveOrdersByRoomId(roomId);
+        if (activeOrders == null || activeOrders.isEmpty()) {
+            return null;
+        }
+        if (activeOrders.size() > 1) {
+            log.error("room {} has multiple active orders: {}", roomId,
+                    activeOrders.stream().map(Order::getId).toList());
+            throw new BusinessException("Multiple active orders found for this room");
+        }
+        return activeOrders.get(0);
     }
 
     private Room lockRoom(Long roomId) {
         Room room = roomMapper.selectByIdForUpdate(roomId);
         if (room == null) {
-            throw new BusinessException("包厢不存在");
+            throw new BusinessException("Room not found");
         }
         return room;
     }
@@ -254,9 +269,31 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return pricePerHour.multiply(hours).setScale(2, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal resolveRoomPricePerHour(Order order, Room currentRoom) {
+        BigDecimal snapshotPrice = order.getRoomPricePerHourSnapshot();
+        if (snapshotPrice != null) {
+            return snapshotPrice.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (currentRoom != null && currentRoom.getPricePerHour() != null) {
+            return currentRoom.getPricePerHour().setScale(2, RoundingMode.HALF_UP);
+        }
+        throw new BusinessException("Room price is not configured");
+    }
+
+    private BigDecimal resolveRoomMinConsumption(Order order, Room currentRoom) {
+        BigDecimal snapshotMinConsumption = order.getRoomMinConsumptionSnapshot();
+        if (snapshotMinConsumption != null) {
+            return snapshotMinConsumption.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (currentRoom != null && currentRoom.getMinConsumption() != null) {
+            return currentRoom.getMinConsumption().setScale(2, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private LocalDateTime requireOrderStartTime(Order order) {
         if (order.getStartTime() == null) {
-            throw new BusinessException("订单开始时间缺失，无法计算时长");
+            throw new BusinessException("Order start time is missing");
         }
         return order.getStartTime();
     }
@@ -274,43 +311,83 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         });
     }
 
+    private void markUnfinishedSongsAsSkipped(Long orderId, LocalDateTime finishTime) {
+        LambdaUpdateWrapper<OrderSong> updateWrapper = new LambdaUpdateWrapper<OrderSong>()
+                .eq(OrderSong::getOrderId, orderId)
+                .eq(OrderSong::getDeleted, 0)
+                .in(OrderSong::getStatus,
+                        OrderSongStatusEnum.WAITING.getCode(),
+                        OrderSongStatusEnum.PLAYING.getCode())
+                .set(OrderSong::getStatus, OrderSongStatusEnum.SKIPPED.getCode())
+                .set(OrderSong::getFinishTime, finishTime)
+                .set(OrderSong::getUpdateTime, finishTime);
+        orderSongMapper.update(null, updateWrapper);
+    }
+
+    private void clearCurrentOrderRoomKey(Long roomId) {
+        try {
+            redisTemplate.delete(RedisKeyConstants.buildCurrentOrderRoomKey(roomId));
+        } catch (Exception e) {
+            log.warn("clear current order cache failed for room {}: {}", roomId, e.getMessage());
+        }
+    }
+
     private void clearPlaybackKeys(Long orderId) {
         try {
             redisTemplate.delete(RedisKeyConstants.buildPlayingKey(orderId));
             redisTemplate.delete(RedisKeyConstants.buildPlayStatusKey(orderId));
             redisTemplate.delete(RedisKeyConstants.buildQueueKey(orderId));
-            log.debug("已清理订单 {} 的播放和队列缓存", orderId);
+            log.debug("cleared playback cache for order {}", orderId);
         } catch (Exception e) {
-            log.warn("清理订单 {} 的播放缓存失败: {}", orderId, e.getMessage());
+            log.warn("clear playback cache failed for order {}: {}", orderId, e.getMessage());
         }
+    }
+
+    private OrderBasicVO convertToBasicVO(Order order) {
+        Room room = null;
+        if (order.getRoomId() != null && order.getRoomNameSnapshot() == null) {
+            room = roomMapper.selectById(order.getRoomId());
+        }
+        String roomName = order.getRoomNameSnapshot();
+        if (roomName == null && room != null) {
+            roomName = room.getName();
+        }
+
+        return OrderBasicVO.builder()
+                .id(order.getId())
+                .orderNo(order.getOrderNo())
+                .roomId(order.getRoomId())
+                .status(order.getStatus())
+                .statusText(order.getStatusText())
+                .roomName(roomName)
+                .build();
     }
 
     private OrderVO convertToVO(Order order) {
         OrderVO vo = new OrderVO();
         BeanUtils.copyProperties(order, vo);
         vo.setStatusText(order.getStatusText());
+        Room room = null;
+        if (order.getRoomId() != null
+                && (order.getRoomNameSnapshot() == null || order.getRoomTypeSnapshot() == null)) {
+            room = roomMapper.selectById(order.getRoomId());
+        }
+        vo.setRoomName(order.getRoomNameSnapshot() != null
+                ? order.getRoomNameSnapshot()
+                : room != null ? room.getName() : null);
+        vo.setRoomType(order.getRoomTypeSnapshot() != null
+                ? order.getRoomTypeSnapshot()
+                : room != null ? room.getType() : null);
 
         if (order.getDurationMinutes() != null && order.getDurationMinutes() > 0) {
             int hours = order.getDurationMinutes() / 60;
             int minutes = order.getDurationMinutes() % 60;
             if (hours > 0 && minutes > 0) {
-                vo.setDurationDesc(hours + "小时" + minutes + "分钟");
+                vo.setDurationDesc(hours + "h" + minutes + "m");
             } else if (hours > 0) {
-                vo.setDurationDesc(hours + "小时");
+                vo.setDurationDesc(hours + "h");
             } else {
-                vo.setDurationDesc(minutes + "分钟");
-            }
-        }
-
-        if (order.getRoomId() != null && (vo.getRoomName() == null || vo.getRoomType() == null)) {
-            Room room = roomMapper.selectById(order.getRoomId());
-            if (room != null) {
-                if (vo.getRoomName() == null) {
-                    vo.setRoomName(room.getName());
-                }
-                if (vo.getRoomType() == null) {
-                    vo.setRoomType(room.getType());
-                }
+                vo.setDurationDesc(minutes + "m");
             }
         }
 
